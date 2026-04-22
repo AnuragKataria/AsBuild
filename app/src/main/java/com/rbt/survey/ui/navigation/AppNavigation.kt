@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rbt.survey.data.local.UserPreferences
 import com.rbt.survey.data.local.db.AppDatabase
+import com.rbt.survey.dgps.DgpsManager
 import com.rbt.survey.data.remote.RetrofitClient
 import com.rbt.survey.data.repository.AuthRepository
 import com.rbt.survey.data.repository.FormRepository
@@ -35,6 +36,9 @@ import com.rbt.survey.ui.map.MapScreen
 import com.rbt.survey.ui.form.MapScreen
 import com.rbt.survey.ui.map.MapViewModel
 import com.rbt.survey.ui.map.MapViewModelFactory
+import com.rbt.survey.ui.dgps.DgpsSettingsScreen
+import com.rbt.survey.ui.dgps.DgpsViewModel
+import com.rbt.survey.ui.dgps.DgpsViewModelFactory
 import com.rbt.survey.ui.splash.SplashScreen
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -55,6 +59,8 @@ sealed class Screen(val route: String) {
         fun createRoute(type: String, fieldId: String, initialValue: String) =
             "form_map/$type/$fieldId/${URLEncoder.encode(initialValue, "UTF-8")}"
     }
+
+    object DgpsSettings : Screen("dgps_settings")
 }
 
 @Composable
@@ -62,6 +68,7 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
     val preferences = UserPreferences(context)
+    val dgpsManager = remember { DgpsManager(context) }
     val isLoggedInState by preferences.authToken.collectAsState(initial = "LOADING")
 
     if (isLoggedInState == "LOADING") {
@@ -152,7 +159,20 @@ fun AppNavigation() {
                         navController.navigate(Screen.Login.route) {
                             popUpTo(0) { inclusive = true }
                         }
+                    },
+                    onNavigateToDgpsSettings = {
+                        navController.navigate(Screen.DgpsSettings.route)
                     }
+                )
+            }
+
+            composable(Screen.DgpsSettings.route) {
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                DgpsSettingsScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
                 )
             }
 
@@ -192,6 +212,7 @@ fun AppNavigation() {
                         repository,
                         preferences,
                         gpName,
+                        dgpsManager,
                         submissionId
                     )
                 )

@@ -12,6 +12,7 @@ import com.rbt.survey.data.model.FormDetailData
 import com.rbt.survey.data.model.FormField
 import com.rbt.survey.data.model.FormOption
 import com.rbt.survey.data.repository.FormRepository
+import com.rbt.survey.dgps.DgpsManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -31,6 +32,7 @@ class FormDataCollectionViewModel(
     private val repository: FormRepository,
     private val preferences: UserPreferences,
     private val selectedGpName: String?,
+    private val dgpsManager: DgpsManager,
     private val submissionId: Int? = null
 ) : ViewModel() {
     private val saveJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
@@ -40,6 +42,10 @@ class FormDataCollectionViewModel(
 
     private val _uiState = MutableStateFlow<FormUiState>(FormUiState.Loading)
     val uiState: StateFlow<FormUiState> = _uiState
+
+    val dgpsLocation = dgpsManager.location
+    val dgpsStatus = dgpsManager.status
+    val useDgps = preferences.useDgps
 
     // Map to store current values of each field: fieldId -> value
     val fieldValues = mutableStateMapOf<String, Any?>()

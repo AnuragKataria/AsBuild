@@ -40,7 +40,8 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigateToMap: (Int, String?) -> Unit,
     onNavigateToEditOfflineSubmission: (Int, Int, String?, String?) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onNavigateToDgpsSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val blockSummaries by viewModel.blockSummaries.collectAsState()
@@ -91,6 +92,17 @@ fun HomeScreen(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Default.Logout, contentDescription = null)
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = { Text("DGPS & CORS") },
+                                onClick = {
+                                    showMenu = false
+                                    onNavigateToDgpsSettings()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Settings, contentDescription = null)
                                 }
                             )
                         }

@@ -45,6 +45,13 @@ import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.rbt.survey.dgps.DgpsStatus
+import com.rbt.survey.dgps.DgpsLocation
+import kotlinx.coroutines.flow.first
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.lifecycle.viewModelScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +64,10 @@ fun FormDataCollectionScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val submitSuccess by viewModel.submitSuccess.collectAsState()
+    
+    val dgpsLocation by viewModel.dgpsLocation.collectAsState()
+    val dgpsStatus by viewModel.dgpsStatus.collectAsState()
+    val useDgps by viewModel.useDgps.collectAsState(false)
 
     val allDisplayFields = remember(uiState) {
         val successState = uiState as? FormUiState.Success ?: return@remember emptyList()
@@ -111,6 +122,10 @@ fun FormDataCollectionScreen(
                 }
                 is FormUiState.Success -> {
                     Column(modifier = Modifier.fillMaxSize()) {
+                        if (useDgps) {
+                            DgpsStatusHeader(dgpsStatus, dgpsLocation)
+                        }
+
                         LazyColumn(
                             modifier = Modifier.weight(1f),
                             contentPadding = PaddingValues(16.dp),
@@ -903,7 +918,7 @@ fun FileUploadField(
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
             tempUri?.let { uri ->
-                watermarkImage(context, uri) { watermarkedUri ->
+                watermarkImage(context, uri, viewModel) { watermarkedUri ->
                     viewModel.onFieldValueChange(field.id, watermarkedUri.toString(), allFields, context)
                 }
             }
@@ -1097,25 +1112,98 @@ fun getValidationError(field: FormField, value: String): String? {
     return null
 }
 
-private fun watermarkImage(context: android.content.Context, uri: android.net.Uri, onComplete: (android.net.Uri) -> Unit) {
-    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-    
-    val hasLocationPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-        context, 
-        android.Manifest.permission.ACCESS_FINE_LOCATION
-    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-    if (hasLocationPermission) {
-        try {
-            fusedLocationClient.lastLocation.addOnCompleteListener { task ->
-                val location = if (task.isSuccessful) task.result else null
+private fun watermarkImage(
+    context: android.content.Context, 
+    uri: android.net.Uri, 
+    viewModel: FormDataCollectionViewModel,
+    onComplete: (android.net.Uri) -> Unit
+) {
+    val scope = viewModel.viewModelScope
+    scope.launch {
+        val useDgps = viewModel.useDgps.first()
+        if (useDgps) {
+            val dgpsLoc = viewModel.dgpsLocation.value
+            if (dgpsLoc != null) {
+                // Convert DgpsLocation to android.location.Location
+                val location = android.location.Location("dgps").apply {
+                    latitude = dgpsLoc.latitude
+                    longitude = dgpsLoc.longitude
+                    altitude = dgpsLoc.altitude
+                    accuracy = dgpsLoc.accuracy
+                }
                 applyWatermark(context, uri, location, onComplete)
+                return@launch
             }
-        } catch (e: SecurityException) {
+        }
+        
+        // Fallback to Fused Location
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+        val hasLocationPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, 
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (hasLocationPermission) {
+            try {
+                fusedLocationClient.lastLocation.addOnCompleteListener { task ->
+                    val location = if (task.isSuccessful) task.result else null
+                    applyWatermark(context, uri, location, onComplete)
+                }
+            } catch (e: SecurityException) {
+                applyWatermark(context, uri, null, onComplete)
+            }
+        } else {
             applyWatermark(context, uri, null, onComplete)
         }
-    } else {
-        applyWatermark(context, uri, null, onComplete)
+    }
+}
+
+@Composable
+fun DgpsStatusHeader(status: DgpsStatus, location: com.rbt.survey.dgps.DgpsLocation?) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = when(status) {
+                is DgpsStatus.Connected -> Color(0xFFE8F5E9)
+                is DgpsStatus.Error -> Color(0xFFFFEBEE)
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Bluetooth,
+                contentDescription = null,
+                tint = when(status) {
+                    is DgpsStatus.Connected -> Color(0xFF4CAF50)
+                    is DgpsStatus.Error -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.primary
+                }
+            )
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = when(status) {
+                        is DgpsStatus.Idle -> "DGPS Disconnected"
+                        is DgpsStatus.Connecting -> "Connecting to DGPS..."
+                        is DgpsStatus.Connected -> "DGPS Connected (Fix: ${location?.fixQuality ?: "-"})"
+                        is DgpsStatus.Error -> "DGPS Error"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                if (status is DgpsStatus.Connected && location != null) {
+                    Text(
+                        text = "Acc: ${String.format("%.2f", location.accuracy)}m | Sats: ${location.satellites}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
     }
 }
 
