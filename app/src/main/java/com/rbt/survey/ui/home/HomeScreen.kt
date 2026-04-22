@@ -28,6 +28,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import com.rbt.survey.data.model.SubmissionItem
+import com.rbt.survey.data.local.db.OfflineSubmission
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,6 +39,7 @@ import com.rbt.survey.data.model.SubmissionItem
 fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigateToMap: (Int, String?) -> Unit,
+    onNavigateToEditOfflineSubmission: (Int, Int, String?, String?) -> Unit,
     onLogout: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -169,6 +174,7 @@ fun HomeScreen(
                                             when (selectedTabIndex) {
                                                 0 -> viewModel.fetchBlockSummary(form.formId)
                                                 1 -> viewModel.fetchCompletedBlockSummary(form.formId)
+                                                2 -> viewModel.fetchOfflineSubmissions(form.formId)
                                                 3 -> viewModel.fetchUploadedSubmissions(form.formId)
                                             }
                                         }
@@ -199,6 +205,7 @@ fun HomeScreen(
                                     when (index) {
                                         0 -> viewModel.fetchBlockSummary(form.formId)
                                         1 -> viewModel.fetchCompletedBlockSummary(form.formId)
+                                        2 -> viewModel.fetchOfflineSubmissions(form.formId)
                                         3 -> viewModel.fetchUploadedSubmissions(form.formId)
                                     }
                                 }
@@ -320,7 +327,53 @@ fun HomeScreen(
 
                 // 🔹 Submitted
                 2 -> {
-                    EmptyState("Submitted data coming soon")
+                    if (selectedForm == null) {
+                        EmptyState("Please select a form")
+                    } else {
+                        val offlineItems by viewModel.offlineSubmissions.collectAsState()
+                        val loading by viewModel.offlineLoading.collectAsState()
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                        ) {
+                            if (loading) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            } else if (offlineItems.isEmpty()) {
+                                EmptyState("No submitted data offline")
+                            } else {
+                                val context = androidx.compose.ui.platform.LocalContext.current
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(offlineItems) { item ->
+                                        OfflineSubmittedTile(
+                                            item = item,
+                                            onClick = {
+                                                selectedForm?.let { form ->
+                                                    onNavigateToEditOfflineSubmission(
+                                                        form.formId,
+                                                        item.id,
+                                                        item.blockCode,
+                                                        item.gp
+                                                    )
+                                                }
+                                            },
+                                            onUploadClick = {
+                                                viewModel.uploadSubmission(context, item.id)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // 🔹 Uploaded
@@ -437,11 +490,66 @@ fun formatDateTime(input: String?): String {
         val time = parts.getOrNull(1)?.take(5) ?: "" // 15:03
 
         val dateParts = date.split("-")
-        val formattedDate = "${dateParts[2]}-${dateParts[1]}-${dateParts[0]}"
+        val formattedDate = if (dateParts.size >= 3) {
+            "${dateParts[2]}-${dateParts[1]}-${dateParts[0]}"
+        } else {
+            date
+        }
 
         "$formattedDate $time"
     } catch (e: Exception) {
         "-"
+    }
+}
+
+@Composable
+fun OfflineSubmittedTile(item: OfflineSubmission, onClick: () -> Unit, onUploadClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "ID : ${item.id} (Offline)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "GP : ${item.gp ?: "-"}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                Text(
+                    text = "Block : ${item.blockCode ?: "-"}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                val format = SimpleDateFormat("dd-MM-yyyy HH:mm", Locale.getDefault())
+                val dateString = format.format(Date(item.timestamp))
+
+                Text(
+                    text = "Saved On : $dateString",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Button(onClick = onUploadClick) {
+                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Upload")
+            }
+        }
     }
 }
 

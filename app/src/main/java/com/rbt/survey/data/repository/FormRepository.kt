@@ -12,9 +12,13 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Response
 
+import com.rbt.survey.data.local.db.OfflineSubmission
+import com.rbt.survey.data.local.db.OfflineSubmissionDao
+
 class FormRepository(
     private val authApi: AuthApi,
-    private val draftDao: FormDraftDao
+    private val draftDao: FormDraftDao,
+    private val offlineSubmissionDao: OfflineSubmissionDao
 ) {
     suspend fun uploadFile(
         context: android.content.Context,
@@ -71,6 +75,22 @@ class FormRepository(
 //    suspend fun submitForm(formId: Int, request: Map<String, Any?>): Response<okhttp3.ResponseBody> {
 //        return authApi.submitForm(formId, request)
 //    }
+
+    suspend fun saveOfflineSubmission(submission: OfflineSubmission) {
+        offlineSubmissionDao.insert(submission)
+    }
+
+    suspend fun getOfflineSubmissions(formId: Int): List<OfflineSubmission> {
+        return offlineSubmissionDao.getSubmissionsForForm(formId)
+    }
+
+    suspend fun getOfflineSubmissionById(id: Int): OfflineSubmission? {
+        return offlineSubmissionDao.getSubmissionById(id)
+    }
+
+    suspend fun deleteOfflineSubmission(id: Int) {
+        offlineSubmissionDao.deleteSubmission(id)
+    }
 
     suspend fun submitForm(formId: Int, body: RequestBody): Response<okhttp3.ResponseBody> {
         return authApi.submitForm(formId, body)

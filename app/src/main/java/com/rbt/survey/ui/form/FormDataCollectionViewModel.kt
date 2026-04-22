@@ -1,6 +1,7 @@
 package com.rbt.survey.ui.form
 
 import androidx.compose.runtime.mutableStateMapOf
+import com.rbt.survey.data.local.db.OfflineSubmission
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.android.gms.maps.model.LatLng
@@ -29,7 +30,8 @@ class FormDataCollectionViewModel(
     private val blockCode: String?,
     private val repository: FormRepository,
     private val preferences: UserPreferences,
-    private val selectedGpName: String?
+    private val selectedGpName: String?,
+    private val submissionId: Int? = null
 ) : ViewModel() {
     private val saveJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
 
@@ -50,23 +52,56 @@ class FormDataCollectionViewModel(
     private val gson = com.google.gson.Gson()
 
     private fun loadDrafts() {
-        viewModelScope.launch {
-            val drafts = repository.getDrafts(formId)
-            drafts.forEach { draft ->
-                val value: Any? = try {
-                    when {
-                        draft.value.startsWith("[") -> {
-                            gson.fromJson(draft.value, List::class.java)
+        if (submissionId != null && submissionId != -1) {
+            viewModelScope.launch {
+                val submission = repository.getOfflineSubmissionById(submissionId)
+                if (submission != null) {
+                    try {
+                        val jsonObject = com.google.gson.JsonParser.parseString(submission.submissionData).asJsonObject
+                        if (jsonObject.has("data")) {
+                            val dataObject = jsonObject.getAsJsonObject("data")
+                            dataObject.entrySet().forEach { entry ->
+                                val value = if (entry.value.isJsonPrimitive) {
+                                    val primitive = entry.value.asJsonPrimitive
+                                    if (primitive.isNumber) {
+                                        if (primitive.asString.contains(".")) primitive.asDouble else primitive.asLong
+                                    } else if (primitive.isBoolean) {
+                                        primitive.asBoolean
+                                    } else {
+                                        primitive.asString
+                                    }
+                                } else if (entry.value.isJsonArray) {
+                                    gson.fromJson(entry.value, List::class.java)
+                                } else {
+                                    entry.value.toString()
+                                }
+                                fieldValues[entry.key] = value
+                            }
                         }
-                        draft.value.toDoubleOrNull() != null -> {
-                            if (draft.value.contains(".")) draft.value.toDouble() else draft.value.toLong()
-                        }
-                        else -> draft.value
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
-                } catch (e: Exception) {
-                    draft.value
                 }
-                fieldValues[draft.fieldId] = value
+            }
+        } else {
+            viewModelScope.launch {
+                val drafts = repository.getDrafts(formId)
+                drafts.forEach { draft ->
+                    val value: Any? = try {
+                        when {
+                            draft.value.startsWith("[") -> {
+                                gson.fromJson(draft.value, List::class.java)
+                            }
+                            draft.value.toDoubleOrNull() != null -> {
+                                if (draft.value.contains(".")) draft.value.toDouble() else draft.value.toLong()
+                            }
+                            else -> draft.value
+                        }
+                    } catch (e: Exception) {
+                        draft.value
+                    }
+                    fieldValues[draft.fieldId] = value
+                }
             }
         }
     }
@@ -494,22 +529,23 @@ class FormDataCollectionViewModel(
             
             _uiState.value = FormUiState.Loading
             try {
-//                val response = repository.submitForm(formId, submissionRequest)
-                val response = repository.submitForm(formId, requestBody)
-                if (response.isSuccessful) {
-                    android.widget.Toast.makeText(context, "Form submitted successfully!", android.widget.Toast.LENGTH_LONG).show()
-                    // Clear drafts on success
-                    repository.clearDrafts(formId)
-                    fieldValues.clear()
+                // Save offline instead of calling the API
+                val submission = OfflineSubmission(
+                    id = if (submissionId != null && submissionId != -1) submissionId else 0,
+                    formId = formId,
+                    blockCode = terminalBlockCode ?: blockCode,
+                    gp = dataMap["GP"]?.toString(),
+                    submissionData = jsonRequest
+                )
+                repository.saveOfflineSubmission(submission)
+                
+                android.widget.Toast.makeText(context, "Form saved offline successfully!", android.widget.Toast.LENGTH_LONG).show()
+                // Clear drafts on success
+                repository.clearDrafts(formId)
+                fieldValues.clear()
 
-                    _submitSuccess.value = true
-                    _uiState.value = currentState
-                } else {
-                    val errorMsg = response.errorBody()?.string() ?: "Submission failed"
-                    android.util.Log.e("SurveySubmission", "Error: $errorMsg")
-                    android.widget.Toast.makeText(context, "Error: $errorMsg", android.widget.Toast.LENGTH_LONG).show()
-                    _uiState.value = FormUiState.Error(errorMsg)
-                }
+                _submitSuccess.value = true
+                _uiState.value = currentState
             } catch (e: Exception) {
                 android.util.Log.e("SurveySubmission", "Exception", e)
                 android.widget.Toast.makeText(context, "Exception: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()

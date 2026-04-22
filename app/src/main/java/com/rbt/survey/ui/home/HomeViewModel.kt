@@ -10,12 +10,15 @@ import com.rbt.survey.data.model.BlockSummary
 import com.rbt.survey.data.model.GpItem
 import com.rbt.survey.data.model.SubmissionItem
 import com.rbt.survey.data.model.SubmissionSearchRequest
+import com.rbt.survey.data.local.db.OfflineSubmission
 import com.rbt.survey.data.repository.GeoRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 sealed class HomeUiState {
     object Loading : HomeUiState()
@@ -63,6 +66,12 @@ class HomeViewModel(
 
     private val _uploadedLoading = MutableStateFlow(false)
     val uploadedLoading: StateFlow<Boolean> = _uploadedLoading
+
+    private val _offlineSubmissions = MutableStateFlow<List<OfflineSubmission>>(emptyList())
+    val offlineSubmissions: StateFlow<List<OfflineSubmission>> = _offlineSubmissions
+
+    private val _offlineLoading = MutableStateFlow(false)
+    val offlineLoading: StateFlow<Boolean> = _offlineLoading
 
 //    private val _uploadedSelectedForm = MutableStateFlow<FormData?>(null)
 //    val uploadedSelectedForm: StateFlow<FormData?> = _uploadedSelectedForm
@@ -133,6 +142,20 @@ class HomeViewModel(
         }
     }
 
+    fun fetchOfflineSubmissions(formId: Int) {
+        viewModelScope.launch {
+            _offlineLoading.value = true
+            try {
+                _offlineSubmissions.value = repository.getOfflineSubmissions(formId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _offlineSubmissions.value = emptyList()
+            } finally {
+                _offlineLoading.value = false
+            }
+        }
+    }
+
     fun fetchForms() {
         viewModelScope.launch {
             _uiState.value = HomeUiState.Loading
@@ -193,6 +216,32 @@ class HomeViewModel(
     fun logout() {
         viewModelScope.launch {
             preferences.clearAuthData()
+        }
+    }
+
+    fun uploadSubmission(context: android.content.Context, submissionId: Int) {
+        viewModelScope.launch {
+            _offlineLoading.value = true
+            try {
+                val submission = repository.getOfflineSubmissionById(submissionId)
+                if (submission != null) {
+                    val requestBody = submission.submissionData.toRequestBody("application/json".toMediaType())
+                    val response = repository.submitForm(submission.formId, requestBody)
+                    
+                    if (response.isSuccessful) {
+                        repository.deleteOfflineSubmission(submissionId)
+                        android.widget.Toast.makeText(context, "Uploaded successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                        fetchOfflineSubmissions(submission.formId)
+                    } else {
+                        android.widget.Toast.makeText(context, "Upload failed: ${response.code()}", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                android.widget.Toast.makeText(context, "Exception: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+            } finally {
+                _offlineLoading.value = false
+            }
         }
     }
 }

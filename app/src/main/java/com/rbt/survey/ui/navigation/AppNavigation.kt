@@ -43,8 +43,8 @@ sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Login : Screen("login")
     object Home : Screen("home")
-    object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}") {
-        fun createRoute(formId: Int, blockCode: String?, gpName: String?) = "form_data/$formId?blockCode=${blockCode ?: ""}&gpName=${gpName ?: ""}"
+    object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}&submissionId={submissionId}") {
+        fun createRoute(formId: Int, blockCode: String?, gpName: String?, submissionId: Int? = null) = "form_data/$formId?blockCode=${blockCode ?: ""}&gpName=${gpName ?: ""}&submissionId=${submissionId ?: -1}"
     }
     object GPMap : Screen("gp_map/{formId}/{blockCode}") {
         fun createRoute(formId: Int, blockCode: String) =
@@ -115,7 +115,7 @@ fun AppNavigation() {
                     RetrofitClient.getGeoApi(context, preferences)
                 }
                 val repository = remember {
-                    FormRepository(authApi, database.formDraftDao())
+                    FormRepository(authApi, database.formDraftDao(), database.offlineSubmissionDao())
                 }
                 val geoRepository = remember {
                     GeoRepository(geoApi)
@@ -140,6 +140,14 @@ fun AppNavigation() {
                             }
                         }
                     },
+                    onNavigateToEditOfflineSubmission = { formId, submissionId, blockCode, gpName ->
+                        val encodedGpName = URLEncoder.encode(gpName ?: "", "UTF-8")
+                        navController.navigate(
+                            Screen.FormDataCollection.createRoute(formId, blockCode, encodedGpName, submissionId)
+                        ) {
+                            launchSingleTop = true
+                        }
+                    },
                     onLogout = {
                         navController.navigate(Screen.Login.route) {
                             popUpTo(0) { inclusive = true }
@@ -161,6 +169,10 @@ fun AppNavigation() {
                         type = NavType.StringType
                         nullable = true
                         defaultValue = null
+                    },
+                    navArgument("submissionId") {
+                        type = NavType.IntType
+                        defaultValue = -1
                     }
                 )
             ) { backStackEntry ->
@@ -168,16 +180,19 @@ fun AppNavigation() {
                 val blockCode = backStackEntry.arguments?.getString("blockCode")
                 val gpNameEncoded = backStackEntry.arguments?.getString("gpName")
                 val gpName = URLDecoder.decode(gpNameEncoded ?: "", "UTF-8")
+                val submissionIdArg = backStackEntry.arguments?.getInt("submissionId") ?: -1
+                val submissionId = if (submissionIdArg != -1) submissionIdArg else null
                 val database = AppDatabase.getDatabase(context)
                 val authApi = RetrofitClient.getAuthenticatedApi(context, preferences)
-                val repository = FormRepository(authApi, database.formDraftDao())
+                val repository = FormRepository(authApi, database.formDraftDao(), database.offlineSubmissionDao())
                 val viewModel: FormDataCollectionViewModel = viewModel(
                     factory = FormDataCollectionViewModelFactory(
                         formId,
                         blockCode,
                         repository,
                         preferences,
-                        gpName
+                        gpName,
+                        submissionId
                     )
                 )
                 FormDataCollectionScreen(
@@ -220,7 +235,8 @@ fun AppNavigation() {
 
                 val repository = FormRepository(
                     authApi,
-                    database.formDraftDao()
+                    database.formDraftDao(),
+                    database.offlineSubmissionDao()
                 )
 
                 val viewModel: MapViewModel = viewModel(
