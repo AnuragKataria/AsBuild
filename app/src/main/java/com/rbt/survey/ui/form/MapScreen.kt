@@ -6,7 +6,10 @@ import android.content.pm.PackageManager
 import android.os.Looper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -16,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
@@ -24,6 +28,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.rbt.survey.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +43,9 @@ fun MapScreen(
     val gson = Gson()
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     val isMultiPointType = type.lowercase().contains("polygon") || type.lowercase().contains("polyline")
+
+    var mapType by remember { mutableStateOf(MapType.NORMAL) }
+    var showMapTypeDialog by remember { mutableStateOf(false) }
 
     // Parse initial value
     val initialPoints = remember {
@@ -161,7 +169,7 @@ fun MapScreen(
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
-                properties = MapProperties(isMyLocationEnabled = hasLocationPermission),
+                properties = MapProperties(isMyLocationEnabled = hasLocationPermission,mapType = mapType),
                 uiSettings = MapUiSettings(myLocationButtonEnabled = true),
                 onMapClick = { latLng ->
                     if (!isTracking) {
@@ -197,6 +205,86 @@ fun MapScreen(
                 } else {
                     points.firstOrNull()?.let { point ->
                         Marker(state = MarkerState(position = point))
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 65.dp, end = 10.dp), // position under location button
+                contentAlignment = Alignment.TopEnd
+            ) {
+                FloatingActionButton(
+                    onClick = { showMapTypeDialog = true },
+                    modifier = Modifier.size(45.dp),
+                    containerColor = Color.White,
+                    contentColor = Color.Black
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Layers,
+                        contentDescription = "Map Type"
+                    )
+                }
+                if (showMapTypeDialog) {
+                    androidx.compose.ui.window.Dialog(
+                        onDismissRequest = { showMapTypeDialog = false }
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White
+                        ) {
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .padding(16.dp)
+                            ) {
+
+                                // Header
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Map Type",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = Color.Black
+                                    )
+
+                                    IconButton(onClick = { showMapTypeDialog = false }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = null,
+                                            tint = Color.Black
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                MapTypeItem("Normal", R.drawable.defaultmap) {
+                                    mapType = MapType.NORMAL
+                                    showMapTypeDialog = false
+                                }
+
+                                MapTypeItem("Satellite", R.drawable.satellite) {
+                                    mapType = MapType.SATELLITE
+                                    showMapTypeDialog = false
+                                }
+
+                                MapTypeItem("Terrain", R.drawable.terrain) {
+                                    mapType = MapType.TERRAIN
+                                    showMapTypeDialog = false
+                                }
+
+                                MapTypeItem("Hybrid", R.drawable.hybrid) {
+                                    mapType = MapType.HYBRID
+                                    showMapTypeDialog = false
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -299,6 +387,35 @@ fun MapScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun MapTypeItem(
+    title: String,
+    imageRes: Int,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Image(
+            painter = painterResource(id = imageRes),
+            contentDescription = title,
+            modifier = Modifier.size(50.dp)
+        )
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Text(
+            text = title,
+            color = Color.Black
+        )
     }
 }
 

@@ -3,6 +3,7 @@ package com.rbt.survey.ui.map
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.maps.android.compose.MapType
 import com.rbt.survey.data.model.GpItem
 import com.rbt.survey.data.model.GpMapItem
 import com.rbt.survey.data.model.GpStatus
@@ -23,6 +24,13 @@ class MapViewModel(
     val gpList: StateFlow<List<GpMapItem>> = _gpList
 
     private var completedGpSet: Set<String> = emptySet()
+
+    private val _mapType = MutableStateFlow(MapType.NORMAL)
+    val mapType: StateFlow<MapType> = _mapType
+
+    fun setMapType(type: MapType) {
+        _mapType.value = type
+    }
 
     fun setCompletedGpList(gpList: List<GpItem>) {
         completedGpSet = gpList
@@ -54,17 +62,42 @@ class MapViewModel(
                         val map = option as? Map<*, *> ?: return@mapNotNull null
 
                         val name = map["Label"]?.toString() ?: return@mapNotNull null
+                        val raw = map["Raw"] as? Map<*, *> ?: return@mapNotNull null
+
+                        val newLocation = raw["NewGpLocation"]?.toString()
                         val location = map["GpLocation"]?.toString()
 
-                        if (location.isNullOrEmpty()) return@mapNotNull null
+                        var lat: Double? = null
+                        var lng: Double? = null
 
-                        val parts = location.split(",")
-                        if (parts.size != 2) return@mapNotNull null
+                        // ✅ Case 1: Use NewGpLocation if present
+                        if (!newLocation.isNullOrEmpty() && newLocation != "null") {
+                            try {
+                                val json = org.json.JSONObject(newLocation)
+                                val coordinates = json.getJSONArray("coordinates")
 
-                        val lat = parts[0].toDoubleOrNull() ?: return@mapNotNull null
-                        val lng = parts[1].toDoubleOrNull() ?: return@mapNotNull null
+                                // GeoJSON → [lng, lat]
+                                lng = coordinates.getDouble(0)
+                                lat = coordinates.getDouble(1)
 
-                        val raw = map["Raw"] as? Map<*, *>
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+
+                        // ✅ Case 2: Else use GpLocation (JSON)
+                        else if (!location.isNullOrEmpty()) {
+                            try {
+                                val json = org.json.JSONObject(location)
+                                lat = json.optDouble("lat")
+                                lng = json.optDouble("lng")
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+
+                        // ❌ Skip if invalid
+                        if (lat == null || lng == null) return@mapNotNull null
                         val lgdCode = raw?.get("LgdCode")?.toString()
 
                         GpMapItem(
