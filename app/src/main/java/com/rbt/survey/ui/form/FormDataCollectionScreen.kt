@@ -1004,6 +1004,21 @@ fun FileUploadField(
 
                 OutlinedButton(
                     onClick = {
+
+                        if (!isLocationEnabled(context)) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Please enable Location before capturing image",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+
+                            // Open Location Settings
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                            context.startActivity(intent)
+
+                            return@OutlinedButton
+                        }
+
                         val permissionCheck = androidx.core.content.ContextCompat.checkSelfPermission(
                             context,
                             android.Manifest.permission.CAMERA
@@ -1017,13 +1032,20 @@ fun FileUploadField(
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = !isReadOnly
+                    enabled = !isReadOnly && isLocationEnabled(context)
                 ) {
                     Icon(Icons.Default.PhotoCamera, null)
                     Spacer(Modifier.width(8.dp))
                     Text("Camera")
                 }
             }
+        }
+        if (!isLocationEnabled(context)) {
+            Text(
+                text = "Location must be enabled to capture image",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
         if (error != null) {
             Text(
@@ -1208,17 +1230,19 @@ fun DgpsStatusHeader(status: DgpsStatus, location: com.rbt.survey.dgps.DgpsLocat
 }
 
 private fun applyWatermark(
-    context: android.content.Context, 
-    uri: android.net.Uri, 
-    location: Location?, 
+    context: android.content.Context,
+    uri: android.net.Uri,
+    location: Location?,
     onComplete: (android.net.Uri) -> Unit
 ) {
     try {
-        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-        val coord = location?.let { "Lat: ${String.format("%.6f", it.latitude)}, Lon: ${String.format("%.6f", it.longitude)}" } ?: "Location: N/A"
-        
+        val timestamp = java.text.SimpleDateFormat(
+            "yyyy-MM-dd HH:mm:ss",
+            java.util.Locale.getDefault()
+        ).format(java.util.Date())
+
         val originalBitmap = context.contentResolver.openInputStream(uri)?.use { inputStream ->
-            BitmapFactory.decodeStream(inputStream)
+            android.graphics.BitmapFactory.decodeStream(inputStream)
         }
 
         if (originalBitmap == null) {
@@ -1226,30 +1250,78 @@ private fun applyWatermark(
             return
         }
 
-        // Handle possible rotation from Exif
-        val mutableBitmap = originalBitmap.copy(Bitmap.Config.ARGB_8888, true)
-        val canvas = Canvas(mutableBitmap)
-        
-        val paint = Paint().apply {
-            color = AndroidColor.YELLOW
-            textSize = mutableBitmap.width / 35f
+        val mutableBitmap = originalBitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, true)
+        val canvas = android.graphics.Canvas(mutableBitmap)
+
+        // 🔹 Text styling
+        val textSize = mutableBitmap.width / 32f
+        val margin = 30f
+        val lineSpacing = 12f
+
+        val textPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.WHITE
+            this.textSize = textSize
             isAntiAlias = true
-            setShadowLayer(4f, 2f, 2f, AndroidColor.BLACK)
+            setShadowLayer(6f, 2f, 2f, android.graphics.Color.BLACK)
         }
 
-        val margin = 40f
-        val textY = mutableBitmap.height - margin
-        val lineSpacing = 10f
-        
-        canvas.drawText(coord, margin, textY, paint)
-        canvas.drawText(timestamp, margin, textY - paint.textSize - lineSpacing, paint)
+        // 🔹 Get Latitude & Longitude
+        val lat = location?.latitude?.let { String.format("%.6f", it) } ?: "N/A"
+        val lon = location?.longitude?.let { String.format("%.6f", it) } ?: "N/A"
 
+        // 🔹 Get Address from Geocoder
+        val address = try {
+            if (location != null && android.location.Geocoder.isPresent()) {
+                val geocoder = android.location.Geocoder(context, java.util.Locale.getDefault())
+                val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                addresses?.firstOrNull()?.getAddressLine(0)
+            } else null
+        } catch (e: Exception) {
+            null
+        } ?: "Address not available"
+
+        // 🔹 Watermark lines (YOUR REQUIRED FORMAT)
+        val lines = listOf(
+            "Date Time : $timestamp",
+            "Latitude  : $lat",
+            "Longitude : $lon",
+            "Address   : $address"
+        )
+
+        // 🔹 Background paint
+        val bgPaint = Paint().apply {
+            color = AndroidColor.argb(150, 0, 0, 0)
+        }
+
+        val lineHeight = textSize + lineSpacing
+        val boxHeight = (lineHeight * lines.size) + margin
+
+        // 🔹 Draw background rectangle (bottom-left)
+        canvas.drawRect(
+            0f,
+            mutableBitmap.height - boxHeight,
+            mutableBitmap.width.toFloat(),
+            mutableBitmap.height.toFloat(),
+            bgPaint
+        )
+
+        // 🔹 Draw text line-by-line
+        var y = mutableBitmap.height - (margin / 2)
+
+        lines.reversed().forEach { line ->
+            canvas.drawText(line, margin, y, textPaint)
+            y -= lineHeight
+        }
+
+        // 🔹 Save back to same URI
         context.contentResolver.openOutputStream(uri)?.use { outputStream ->
             mutableBitmap.compress(Bitmap.CompressFormat.JPEG, 90, outputStream)
         }
-        
+
         onComplete(uri)
+
     } catch (e: Exception) {
+        e.printStackTrace()
         onComplete(uri)
     }
 }
@@ -1347,4 +1419,12 @@ private fun resolveAddressFromCoordinates(
     } catch (e: Exception) {
         null
     }
+}
+
+fun isLocationEnabled(context: android.content.Context): Boolean {
+    val locationManager =
+        context.getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
+
+    return locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+            locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
 }
