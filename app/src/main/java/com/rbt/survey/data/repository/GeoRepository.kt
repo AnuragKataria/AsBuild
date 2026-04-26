@@ -7,20 +7,88 @@ import com.rbt.survey.data.model.SubmissionSearchRequest
 import com.rbt.survey.data.remote.GeoApi
 import retrofit2.Response
 
-class GeoRepository(private val geoApi: GeoApi) {
+import com.google.gson.Gson
+import com.rbt.survey.data.local.db.CachedBlockAssignment
+import com.rbt.survey.data.local.db.CachedBlockAssignmentDao
+import com.rbt.survey.data.local.db.CachedBlockSummary
+import com.rbt.survey.data.local.db.CachedBlockSummaryDao
+import com.rbt.survey.data.local.db.CachedUploadedSubmission
+import com.rbt.survey.data.local.db.CachedUploadedSubmissionDao
+
+class GeoRepository(
+    private val geoApi: GeoApi,
+    private val cachedBlockAssignmentDao: CachedBlockAssignmentDao,
+    private val cachedBlockSummaryDao: CachedBlockSummaryDao,
+    private val cachedUploadedSubmissionDao: CachedUploadedSubmissionDao
+) {
+    private val gson = Gson()
+
     suspend fun getBlockAssignments(userId: String): Response<BlockAssignmentResponse> {
-        return geoApi.getBlockAssignments(userId)
+        return try {
+            val response = geoApi.getBlockAssignments(userId)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val json = gson.toJson(response.body()?.data?.assignments)
+                cachedBlockAssignmentDao.insert(CachedBlockAssignment(userId, json))
+            }
+            response
+        } catch (e: Exception) {
+            val cached = cachedBlockAssignmentDao.getByUserId(userId)
+            if (cached != null) {
+                val assignments = gson.fromJson(cached.assignmentsJson, Array<com.rbt.survey.data.model.Assignment>::class.java).toList()
+                val userIdInt = userId.toIntOrNull() ?: 0
+                Response.success(BlockAssignmentResponse(true, "Loaded from cache", com.rbt.survey.data.model.BlockAssignmentData(userIdInt, assignments), null))
+            } else {
+                throw e
+            }
+        }
     }
 
     suspend fun getBlockSummary(userId: String, formId: Int): Response<BlockSummaryResponse> {
-        return geoApi.getBlockSummary(userId, formId)
+        return try {
+            val response = geoApi.getBlockSummary(userId, formId)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val json = gson.toJson(response.body()?.data)
+                cachedBlockSummaryDao.insert(CachedBlockSummary(userId, formId, json))
+            }
+            response
+        } catch (e: Exception) {
+            val cached = cachedBlockSummaryDao.getSummary(userId, formId)
+            if (cached != null) {
+                val summaries = gson.fromJson(cached.summaryJson, Array<com.rbt.survey.data.model.BlockSummary>::class.java).toList()
+                Response.success(BlockSummaryResponse(true, "Loaded from cache", summaries, null))
+            } else {
+                throw e
+            }
+        }
     }
 
     suspend fun getUploadedSubmissions(
         formId: Int,
         request: SubmissionSearchRequest
     ): Response<SubmissionResponse> {
-        return geoApi.getUploadedSubmissions(formId, request)
+        return try {
+            val response = geoApi.getUploadedSubmissions(formId, request)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val items = response.body()?.data?.items ?: emptyList()
+                val cached = items.map {
+                    CachedUploadedSubmission(formId, it.submissionId, gson.toJson(it))
+                }
+                cachedUploadedSubmissionDao.deleteByFormId(formId)
+                cachedUploadedSubmissionDao.insert(cached)
+            }
+            response
+        } catch (e: Exception) {
+            val cached = cachedUploadedSubmissionDao.getByFormId(formId)
+            if (cached.isNotEmpty()) {
+                val items = cached.map {
+                    gson.fromJson(it.submissionJson, com.rbt.survey.data.model.SubmissionItem::class.java)
+                }
+                val data = com.rbt.survey.data.model.SubmissionData(items, items.size, 1, items.size)
+                Response.success(SubmissionResponse(true, "Loaded from cache", data, null))
+            } else {
+                throw e
+            }
+        }
     }
 
 }

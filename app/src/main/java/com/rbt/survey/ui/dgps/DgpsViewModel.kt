@@ -37,6 +37,7 @@ class DgpsViewModel(
     val savedUser = userPreferences.corsUser
     val savedPass = userPreferences.corsPass
     val useDgps = userPreferences.useDgps
+    val useCors = userPreferences.useCors
 
     @SuppressLint("MissingPermission")
     fun scanDevices() {
@@ -53,12 +54,20 @@ class DgpsViewModel(
         mountpoint: String,
         user: String,
         pass: String,
-        enabled: Boolean
+        enabled: Boolean,
+        useCorsFlag: Boolean
     ) {
         viewModelScope.launch {
-            userPreferences.saveDgpsSettings(address, host, port, mountpoint, user, pass, enabled)
+            userPreferences.saveDgpsSettings(address, host, port, mountpoint, user, pass, enabled, useCorsFlag)
             if (enabled) {
-                dgpsManager.connect(address, host, port.toIntOrNull(), mountpoint, user, pass)
+                dgpsManager.connect(
+                    address, 
+                    if (useCorsFlag) host else null, 
+                    if (useCorsFlag) port.toIntOrNull() else null, 
+                    if (useCorsFlag) mountpoint else null, 
+                    if (useCorsFlag) user else null, 
+                    if (useCorsFlag) pass else null
+                )
             } else {
                 dgpsManager.disconnect()
             }

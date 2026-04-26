@@ -25,6 +25,7 @@ class UserPreferences(private val context: Context) {
         val CORS_USER = stringPreferencesKey("cors_user")
         val CORS_PASS = stringPreferencesKey("cors_pass")
         val USE_DGPS = stringPreferencesKey("use_dgps") // "true" or "false"
+        val USE_CORS = stringPreferencesKey("use_cors") // "true" or "false"
     }
 
     val authToken: Flow<String?> = context.dataStore.data.map { it[AUTH_TOKEN] }
@@ -38,6 +39,7 @@ class UserPreferences(private val context: Context) {
     val corsUser: Flow<String?> = context.dataStore.data.map { it[CORS_USER] }
     val corsPass: Flow<String?> = context.dataStore.data.map { it[CORS_PASS] }
     val useDgps: Flow<Boolean> = context.dataStore.data.map { it[USE_DGPS] == "true" }
+    val useCors: Flow<Boolean> = context.dataStore.data.map { it[USE_CORS] != "false" } // Default to true
 
     suspend fun saveAuthData(token: String, refreshToken: String, name: String, email: String, userId: String) {
         context.dataStore.edit { prefs ->
@@ -62,7 +64,8 @@ class UserPreferences(private val context: Context) {
         mountpoint: String?,
         user: String?,
         pass: String?,
-        useDgps: Boolean
+        useDgps: Boolean,
+        useCors: Boolean
     ) {
         context.dataStore.edit { prefs ->
             address?.let { prefs[DGPS_DEVICE_ADDRESS] = it }
@@ -72,6 +75,7 @@ class UserPreferences(private val context: Context) {
             user?.let { prefs[CORS_USER] = it }
             pass?.let { prefs[CORS_PASS] = it }
             prefs[USE_DGPS] = useDgps.toString()
+            prefs[USE_CORS] = useCors.toString()
         }
     }
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Satellite
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,13 +17,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rbt.survey.dgps.DgpsStatus
+import com.rbt.survey.dgps.getFixQualityString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("MissingPermission")
 @Composable
 fun DgpsSettingsScreen(
     viewModel: DgpsViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToSatelliteView: () -> Unit
 ) {
     val devices by viewModel.bluetoothDevices.collectAsState()
     val status by viewModel.dgpsStatus.collectAsState()
@@ -38,6 +41,7 @@ fun DgpsSettingsScreen(
     val savedUser by viewModel.savedUser.collectAsState(null)
     val savedPass by viewModel.savedPass.collectAsState(null)
     val useDgpsEnabled by viewModel.useDgps.collectAsState(false)
+    val useCorsEnabled by viewModel.useCors.collectAsState(true)
 
     var address by remember(savedAddress) { mutableStateOf(savedAddress ?: "") }
     var host by remember(savedHost) { mutableStateOf(savedHost ?: "103.205.244.106") }
@@ -46,6 +50,7 @@ fun DgpsSettingsScreen(
     var user by remember(savedUser) { mutableStateOf(savedUser ?: "rbtonline021") }
     var pass by remember(savedPass) { mutableStateOf(savedPass ?: "cors@2022") }
     var enabled by remember(useDgpsEnabled) { mutableStateOf(useDgpsEnabled) }
+    var enabledCors by remember(useCorsEnabled) { mutableStateOf(useCorsEnabled) }
 
     Scaffold(
         topBar = {
@@ -100,7 +105,19 @@ fun DgpsSettingsScreen(
                         Text("NTRIP: ${if (isNtripConnected) "Streaming Corrections" else "Disconnected"}")
                         location?.let {
                             Text("Lat: ${it.latitude}, Lon: ${it.longitude}")
-                            Text("Fix: ${it.fixQuality} | Sats: ${it.satellites} | Acc: ${String.format("%.2f", it.accuracy)}m")
+                            Text("Fix: ${getFixQualityString(it.fixQuality)} | Sats: ${it.satellites} | Acc: ${String.format("%.3f", it.accuracy)}m")
+                        }
+                        
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Button(
+                            onClick = onNavigateToSatelliteView,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Default.Satellite, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("View Satellite Status")
                         }
                     }
                 }
@@ -140,18 +157,31 @@ fun DgpsSettingsScreen(
             Text("CORS / NTRIP Settings", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Enable CORS Corrections", style = MaterialTheme.typography.bodyLarge)
+                Switch(checked = enabledCors, onCheckedChange = { enabledCors = it })
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+
             OutlinedTextField(
                 value = host,
                 onValueChange = { host = it },
                 label = { Text("HOST") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabledCors
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = port,
                 onValueChange = { port = it },
                 label = { Text("PORT") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabledCors
             )
             Spacer(modifier = Modifier.height(8.dp))
             var showMountpointDropdown by remember { mutableStateOf(false) }
@@ -162,10 +192,11 @@ fun DgpsSettingsScreen(
                     onValueChange = { mountpoint = it },
                     label = { Text("Mountpoint") },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = enabledCors,
                     trailingIcon = {
                         if (isFetchingMountpoints) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        } else {
+                        } else if (enabledCors) {
                             IconButton(onClick = { 
                                 viewModel.fetchMountpoints(host, port)
                                 showMountpointDropdown = true
@@ -199,21 +230,23 @@ fun DgpsSettingsScreen(
                 value = user,
                 onValueChange = { user = it },
                 label = { Text("Username") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabledCors
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = pass,
                 onValueChange = { pass = it },
                 label = { Text("Password") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabledCors
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
                 onClick = {
-                    viewModel.saveAndConnect(address, host, port, mountpoint, user, pass, enabled)
+                    viewModel.saveAndConnect(address, host, port, mountpoint, user, pass, enabled, enabledCors)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium

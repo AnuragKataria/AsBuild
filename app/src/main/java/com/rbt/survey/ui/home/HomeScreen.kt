@@ -48,7 +48,7 @@ fun HomeScreen(
     val blockSummaryLoading by viewModel.blockSummaryLoading.collectAsState()
 
     var showMenu by remember { mutableStateOf(false) }
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
 
 //    var selectedForm by remember { mutableStateOf<FormData?>(null) }
     val selectedForm by viewModel.selectedForm.collectAsState()
@@ -68,7 +68,6 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             Column {
-
                 // 🔹 TOP BAR
                 CenterAlignedTopAppBar(
                     title = { Text("Survey Dashboard", fontWeight = FontWeight.Bold) },
@@ -125,7 +124,7 @@ fun HomeScreen(
                             onExpandedChange = { expandedFormMenu = !expandedFormMenu }
                         ) {
                             OutlinedTextField(
-                                value = "",
+                                value = selectedForm?.formName ?: "",
                                 onValueChange = {},
                                 readOnly = true,
                                 label = { Text("Select Form") },
@@ -135,24 +134,7 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                placeholder = {
-                                    if (selectedForm == null) {
-                                        Text("Select Form")
-                                    } else {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text(selectedForm!!.formName)
-                                            Text(
-                                                "v${selectedForm!!.currentVersionNo}",
-                                                color = MaterialTheme.colorScheme.primary,
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
-                                    }
-                                }
+                                shape = RoundedCornerShape(12.dp)
                             )
 
                             ExposedDropdownMenu(
@@ -211,7 +193,7 @@ fun HomeScreen(
                         Tab(
                             selected = selectedTabIndex == index,
                             onClick = {
-                                selectedTabIndex = index
+                                viewModel.setSelectedTabIndex(index)
 
                                 selectedForm?.let { form ->
                                     when (index) {

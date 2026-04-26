@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -32,16 +34,21 @@ import com.rbt.survey.ui.home.HomeViewModelFactory
 import com.rbt.survey.ui.login.LoginScreen
 import com.rbt.survey.ui.login.LoginViewModel
 import com.rbt.survey.ui.login.LoginViewModelFactory
-import com.rbt.survey.ui.map.MapScreen
-import com.rbt.survey.ui.form.MapScreen
+import com.rbt.survey.ui.map.MapScreen as GpMapScreen
+import com.rbt.survey.ui.form.MapScreen as FieldMapScreen
 import com.rbt.survey.ui.map.MapViewModel
 import com.rbt.survey.ui.map.MapViewModelFactory
 import com.rbt.survey.ui.dgps.DgpsSettingsScreen
 import com.rbt.survey.ui.dgps.DgpsViewModel
 import com.rbt.survey.ui.dgps.DgpsViewModelFactory
+import com.rbt.survey.ui.dgps.SatelliteViewScreen
 import com.rbt.survey.ui.splash.SplashScreen
 import java.net.URLDecoder
 import java.net.URLEncoder
+
+import androidx.work.*
+import com.rbt.survey.worker.SyncWorker
+import java.util.concurrent.TimeUnit
 
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
@@ -61,7 +68,9 @@ sealed class Screen(val route: String) {
     }
 
     object DgpsSettings : Screen("dgps_settings")
+    object SatelliteView : Screen("satellite_view")
 }
+
 
 @Composable
 fun AppNavigation() {
@@ -70,6 +79,48 @@ fun AppNavigation() {
     val preferences = UserPreferences(context)
     val dgpsManager = remember { DgpsManager(context) }
     val isLoggedInState by preferences.authToken.collectAsState(initial = "LOADING")
+
+    // Setup Background Sync
+    LaunchedEffect(Unit) {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "OfflineSync",
+            ExistingPeriodicWorkPolicy.KEEP,
+            syncRequest
+        )
+    }
+
+    // 🔥 Auto-connect DGPS on app start
+    LaunchedEffect(Unit) {
+        val useDgps = preferences.useDgps.first()
+        if (useDgps) {
+            val address = preferences.dgpsDeviceAddress.first()
+            val useCors = preferences.useCors.first()
+            val host = preferences.corsHost.first()
+            val port = preferences.corsPort.first()
+            val mountpoint = preferences.corsMountpoint.first()
+            val user = preferences.corsUser.first()
+            val pass = preferences.corsPass.first()
+
+            if (address != null && address.isNotEmpty()) {
+                dgpsManager.connect(
+                    address,
+                    if (useCors) host else null,
+                    if (useCors) port?.toIntOrNull() else null,
+                    if (useCors) mountpoint else null,
+                    if (useCors) user else null,
+                    if (useCors) pass else null
+                )
+            }
+        }
+    }
 
     if (isLoggedInState == "LOADING") {
         // Show a simple blank screen while loading preferences to avoid flickering
@@ -122,10 +173,22 @@ fun AppNavigation() {
                     RetrofitClient.getGeoApi(context, preferences)
                 }
                 val repository = remember {
-                    FormRepository(authApi, database.formDraftDao(), database.offlineSubmissionDao())
+                    FormRepository(
+                        authApi, 
+                        database.formDraftDao(), 
+                        database.offlineSubmissionDao(),
+                        database.cachedFormDao(),
+                        database.cachedFormDetailDao(),
+                        database.pendingFileUploadDao()
+                    )
                 }
                 val geoRepository = remember {
-                    GeoRepository(geoApi)
+                    GeoRepository(
+                        geoApi,
+                        database.cachedBlockAssignmentDao(),
+                        database.cachedBlockSummaryDao(),
+                        database.cachedUploadedSubmissionDao()
+                    )
                 }
                 val parentEntry = remember {
                     navController.getBackStackEntry(Screen.Home.route)
@@ -172,6 +235,19 @@ fun AppNavigation() {
                 )
                 DgpsSettingsScreen(
                     viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToSatelliteView = {
+                        navController.navigate(Screen.SatelliteView.route)
+                    }
+                )
+            }
+
+            composable(Screen.SatelliteView.route) {
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                SatelliteViewScreen(
+                    viewModel = dgpsViewModel,
                     onBack = { navController.popBackStack() }
                 )
             }
@@ -204,7 +280,14 @@ fun AppNavigation() {
                 val submissionId = if (submissionIdArg != -1) submissionIdArg else null
                 val database = AppDatabase.getDatabase(context)
                 val authApi = RetrofitClient.getAuthenticatedApi(context, preferences)
-                val repository = FormRepository(authApi, database.formDraftDao(), database.offlineSubmissionDao())
+                val repository = FormRepository(
+                    authApi, 
+                    database.formDraftDao(), 
+                    database.offlineSubmissionDao(),
+                    database.cachedFormDao(),
+                    database.cachedFormDetailDao(),
+                    database.pendingFileUploadDao()
+                )
                 val viewModel: FormDataCollectionViewModel = viewModel(
                     factory = FormDataCollectionViewModelFactory(
                         formId,
@@ -257,7 +340,10 @@ fun AppNavigation() {
                 val repository = FormRepository(
                     authApi,
                     database.formDraftDao(),
-                    database.offlineSubmissionDao()
+                    database.offlineSubmissionDao(),
+                    database.cachedFormDao(),
+                    database.cachedFormDetailDao(),
+                    database.pendingFileUploadDao()
                 )
 
                 val viewModel: MapViewModel = viewModel(
@@ -269,7 +355,7 @@ fun AppNavigation() {
                 }
                 val homeViewModel: HomeViewModel = viewModel(parentEntry)
 
-                MapScreen(
+                GpMapScreen(
                     viewModel = viewModel,
                     formId = formId,
                     blockCode = blockCode,
@@ -299,7 +385,7 @@ fun AppNavigation() {
                 val fieldId = backStackEntry.arguments?.getString("fieldId") ?: ""
                 val initialValue = URLDecoder.decode(backStackEntry.arguments?.getString("initialValue") ?: "", "UTF-8")
 
-                MapScreen(
+                FieldMapScreen(
                     type = type,
                     fieldId = fieldId,
                     initialValue = initialValue,

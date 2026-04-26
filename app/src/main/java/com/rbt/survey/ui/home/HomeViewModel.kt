@@ -73,6 +73,13 @@ class HomeViewModel(
     private val _offlineLoading = MutableStateFlow(false)
     val offlineLoading: StateFlow<Boolean> = _offlineLoading
 
+    private val _selectedTabIndex = MutableStateFlow(0)
+    val selectedTabIndex: StateFlow<Int> = _selectedTabIndex.asStateFlow()
+
+    fun setSelectedTabIndex(index: Int) {
+        _selectedTabIndex.value = index
+    }
+
 //    private val _uploadedSelectedForm = MutableStateFlow<FormData?>(null)
 //    val uploadedSelectedForm: StateFlow<FormData?> = _uploadedSelectedForm
 
