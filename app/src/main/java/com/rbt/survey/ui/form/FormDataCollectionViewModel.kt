@@ -150,7 +150,7 @@ class FormDataCollectionViewModel(
                     data.currentVersion?.schema?.fields?.forEach { field ->
 
                         // ✅ Initialize ALL fields properly
-                        if (!fieldValues.containsKey(field.id)) {
+                        if (!fieldValues.containsKey(field.id)|| fieldValues[field.id] == null) {
 
                             when {
                                 // 🔥 Hidden fields (force include)
@@ -166,8 +166,21 @@ class FormDataCollectionViewModel(
                         }
                     }
 
+                    val fields = data.currentVersion?.schema?.fields ?: emptyList()
+
                     if (!selectedGpName.isNullOrEmpty()) {
                         fieldValues["GP"] = selectedGpName
+
+                        // 🔥 IMPORTANT: Only auto-set location if NOT already saved
+                        val mapField = fields.find { it.type == "map" }
+
+                        if (mapField != null) {
+                            val existingValue = fieldValues[mapField.id]
+
+                            if (existingValue == null || existingValue.toString().isBlank()) {
+                                updateDependentMapFields("GP", selectedGpName, fields)
+                            }
+                        }
                     }
                 } else {
                     _uiState.value = FormUiState.Error(response.body()?.message ?: "Failed to load form details")
@@ -196,6 +209,8 @@ class FormDataCollectionViewModel(
         }
 
         fieldValues[fieldId] = newValue
+        // 🔥 Auto update dependent map fields (like GPLocation)
+        updateDependentMapFields(fieldId, newValue, fields)
 
         // 🔥 Handle conditional visibility + resetOnHide
         fields.forEach { f ->
@@ -242,6 +257,87 @@ class FormDataCollectionViewModel(
                     onFieldValueChange(f.id, null, fields, context) 
                 }
             }
+        }
+    }
+
+    private fun updateDependentMapFields(
+        changedFieldId: String,
+        newValue: Any?,
+        fields: List<FormField>
+    ) {
+        fields.forEach { f ->
+
+            if (f.type == "map" && f.dependentOptions != null) {
+
+                val dep = f.dependentOptions as? Map<*, *> ?: return@forEach
+
+                val sourceField = dep["sourceField"]?.toString() ?: return@forEach
+                val sourceProperty = dep["sourceProperty"]?.toString() ?: return@forEach
+
+                if (sourceField == changedFieldId) {
+
+                    val parentValue = newValue?.toString() ?: return@forEach
+                    val parentField = fields.find { it.id == sourceField } ?: return@forEach
+
+                    val selectedOption = parentField.options?.firstOrNull { option ->
+                        try {
+                            val json = gson.toJsonTree(option).asJsonObject
+                            json.get("Value")?.asString == parentValue
+                        } catch (e: Exception) {
+                            false
+                        }
+                    }
+
+                    if (selectedOption != null) {
+                        try {
+                            val json = gson.toJsonTree(selectedOption).asJsonObject
+                            val raw = json.getAsJsonObject("Raw")
+
+                            val locationValue =
+                                raw?.get("NewGpLocation")
+                                    ?: raw?.get(sourceProperty)
+
+                            if (locationValue != null && !locationValue.isJsonNull) {
+
+                                val valueStr = if (locationValue.isJsonPrimitive) {
+                                    locationValue.asString
+                                } else {
+                                    locationValue.toString()
+                                }
+
+// 🔥 Convert immediately to GeoJSON
+                                val geoJson = convertLatLngToGeoJson(valueStr)
+
+// ✅ Store proper format
+                                fieldValues[f.id] = geoJson ?: valueStr
+
+                                android.util.Log.d("MAP_INIT", "Auto-set ${f.id} = $valueStr")
+
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("MAP_INIT", "Error parsing", e)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun convertLatLngToGeoJson(value: String): Map<String, Any>? {
+        return try {
+            val json = gson.fromJson(value, Map::class.java)
+
+            val lat = (json["lat"] as? Double)
+            val lng = (json["lng"] as? Double)
+
+            if (lat != null && lng != null) {
+                mapOf(
+                    "type" to "Point",
+                    "coordinates" to listOf(lng, lat) // ⚠️ [lng, lat]
+                )
+            } else null
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -493,8 +589,23 @@ class FormDataCollectionViewModel(
 
                         // Map
                         field.type == "map" -> {
-                            val mapValue = formatGeoJson(field, value.toString())
-                            dataMap[field.id] = mapValue ?: value
+                            when (value) {
+
+                                // ✅ Already proper GeoJSON (after your conversion)
+                                is Map<*, *> -> {
+                                    dataMap[field.id] = value
+                                }
+
+                                // ✅ Old string format (lat,lng OR raw string)
+                                is String -> {
+                                    val mapValue = formatGeoJson(field, value)
+                                    dataMap[field.id] = mapValue ?: value
+                                }
+
+                                else -> {
+                                    dataMap[field.id] = value
+                                }
+                            }
                         }
 
                         // Default

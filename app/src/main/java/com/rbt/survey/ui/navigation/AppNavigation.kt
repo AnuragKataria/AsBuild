@@ -313,12 +313,7 @@ fun AppNavigation() {
                     },
                     navController = navController,
                     onSubmitSuccess = {
-                        navController.navigate("home") {
-                            popUpTo("home") {
-                                inclusive = false
-                            }
-                            launchSingleTop = true
-                        }
+                        navController.popBackStack()
                     }
                 )
             }
