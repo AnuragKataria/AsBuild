@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.rbt.survey.dgps.DgpsStatus
 import com.rbt.survey.dgps.getFixQualityString
 
@@ -25,7 +27,8 @@ import com.rbt.survey.dgps.getFixQualityString
 fun DgpsSettingsScreen(
     viewModel: DgpsViewModel,
     onBack: () -> Unit,
-    onNavigateToSatelliteView: () -> Unit
+    onNavigateToSatelliteView: () -> Unit,
+    onNavigateToBluetoothList: () -> Unit
 ) {
     val devices by viewModel.bluetoothDevices.collectAsState()
     val status by viewModel.dgpsStatus.collectAsState()
@@ -52,6 +55,14 @@ fun DgpsSettingsScreen(
     var enabled by remember(useDgpsEnabled) { mutableStateOf(useDgpsEnabled) }
     var enabledCors by remember(useCorsEnabled) { mutableStateOf(useCorsEnabled) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.errorFlow.collect { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -70,50 +81,74 @@ fun DgpsSettingsScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            if (status is DgpsStatus.Connected) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Location Data", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        location?.let {
+                            Text("Lat: ${it.latitude}")
+                            Text("Lon: ${it.longitude}")
+                            Text("Fix: ${getFixQualityString(it.fixQuality)} | Sats: ${it.satellites} \n Acc: ${String.format("%.3f", it.accuracy)}m")
+                        }
+                    }
+                }
+            }
+
+            // --- BLUETOOTH SECTION ---
+            Text("Bluetooth Connection", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Enable Bluetooth DGPS", style = MaterialTheme.typography.titleMedium)
-                        Switch(checked = enabled, onCheckedChange = { enabled = it })
-                    }
-                    
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
                     Text(
                         text = "Status: ${when(status) {
                             is DgpsStatus.Idle -> "Disconnected"
                             is DgpsStatus.Connecting -> "Connecting..."
                             is DgpsStatus.Connected -> "Connected"
-                            is DgpsStatus.Error -> "Error: ${(status as DgpsStatus.Error).message}"
+                            is DgpsStatus.Error -> "Error"
                         }}",
-                        color = when(status) {
-                            is DgpsStatus.Connected -> Color(0xFF4CAF50)
-                            is DgpsStatus.Error -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = if (status is DgpsStatus.Connected) Color(0xFF4CAF50) else Color.Red
                     )
                     
-                    if (status is DgpsStatus.Connected) {
-                        Text("NTRIP: ${if (isNtripConnected) "Streaming Corrections" else "Disconnected"}")
-                        location?.let {
-                            Text("Lat: ${it.latitude}, Lon: ${it.longitude}")
-                            Text("Fix: ${getFixQualityString(it.fixQuality)} | Sats: ${it.satellites} | Acc: ${String.format("%.3f", it.accuracy)}m")
+                    if (savedAddress != null) {
+                        Text("Device: $savedAddress", style = MaterialTheme.typography.bodySmall)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = onNavigateToBluetoothList,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Bluetooth, null)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Select Device")
                         }
                         
+                        OutlinedButton(
+                            onClick = { viewModel.disconnectBluetooth() },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
+                        ) {
+                            Text("Disconnect Bluetooth")
+                        }
+                    }
+
+                    if (status is DgpsStatus.Connected) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        
                         Button(
                             onClick = onNavigateToSatelliteView,
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                         ) {
                             Icon(Icons.Default.Satellite, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
@@ -125,144 +160,130 @@ fun DgpsSettingsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text("Bluetooth Device", style = MaterialTheme.typography.titleMedium)
+            // --- CORS SECTION ---
+            Text("CORS / NTRIP Settings", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.height(8.dp))
             
-            Button(onClick = { viewModel.scanDevices() }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Bluetooth, null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Refresh Paired Devices")
-            }
-
-            devices.forEach { device ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = address == device.address,
-                        onClick = { address = device.address }
-                    )
-                    Text(
-                        text = "${device.name ?: "Unknown"} (${device.address})",
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text("CORS / NTRIP Settings", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
-                Text("Enable CORS Corrections", style = MaterialTheme.typography.bodyLarge)
-                Switch(checked = enabledCors, onCheckedChange = { enabledCors = it })
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Enable CORS Corrections", style = MaterialTheme.typography.bodyLarge)
+                        Switch(checked = enabledCors, onCheckedChange = { enabledCors = it })
+                    }
+                    
+                    Text(
+                        text = "NTRIP: ${if (isNtripConnected) "Streaming Corrections" else "Disconnected"}",
+                        color = if (isNtripConnected) Color(0xFF4CAF50) else Color.Gray,
+                        fontWeight = FontWeight.Bold
+                    )
 
-            OutlinedTextField(
-                value = host,
-                onValueChange = { host = it },
-                label = { Text("HOST") },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabledCors
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = port,
-                onValueChange = { port = it },
-                label = { Text("PORT") },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabledCors
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            var showMountpointDropdown by remember { mutableStateOf(false) }
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = mountpoint,
-                    onValueChange = { mountpoint = it },
-                    label = { Text("Mountpoint") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = enabledCors,
-                    trailingIcon = {
-                        if (isFetchingMountpoints) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        } else if (enabledCors) {
-                            IconButton(onClick = { 
-                                viewModel.fetchMountpoints(host, port)
-                                showMountpointDropdown = true
-                            }) {
-                                Icon(Icons.Default.Settings, contentDescription = "Fetch Mountpoints")
+                    OutlinedTextField(
+                        value = host,
+                        onValueChange = { host = it },
+                        label = { Text("HOST") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabledCors
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = port,
+                        onValueChange = { port = it },
+                        label = { Text("PORT") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabledCors
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    var showMountpointDropdown by remember { mutableStateOf(false) }
+
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = mountpoint,
+                            onValueChange = { mountpoint = it },
+                            label = { Text("Mountpoint") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = enabledCors,
+                            trailingIcon = {
+                                if (isFetchingMountpoints) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else if (enabledCors) {
+                                    IconButton(onClick = { 
+                                        viewModel.fetchMountpoints(host, port)
+                                        showMountpointDropdown = true
+                                    }) {
+                                        Icon(Icons.Default.Settings, contentDescription = "Fetch Mountpoints")
+                                    }
+                                }
+                            }
+                        )
+                        
+                        DropdownMenu(
+                            expanded = showMountpointDropdown && mountpoints.isNotEmpty(),
+                            onDismissRequest = { showMountpointDropdown = false },
+                            modifier = Modifier.fillMaxWidth(0.9f)
+                        ) {
+                            mountpoints.forEach { mp ->
+                                DropdownMenuItem(
+                                    text = { Text(mp) },
+                                    onClick = {
+                                        mountpoint = mp
+                                        showMountpointDropdown = false
+                                    }
+                                )
                             }
                         }
                     }
-                )
-                
-                DropdownMenu(
-                    expanded = showMountpointDropdown && mountpoints.isNotEmpty(),
-                    onDismissRequest = { showMountpointDropdown = false },
-                    modifier = Modifier.fillMaxWidth(0.9f)
-                ) {
-                    mountpoints.forEach { mp ->
-                        DropdownMenuItem(
-                            text = { Text(mp) },
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = user,
+                        onValueChange = { user = it },
+                        label = { Text("Username") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabledCors
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pass,
+                        onValueChange = { pass = it },
+                        label = { Text("Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = enabledCors
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    if (!isNtripConnected) {
+                        Button(
                             onClick = {
-                                mountpoint = mp
-                                showMountpointDropdown = false
-                            }
-                        )
+                                viewModel.connectCors(host, port, mountpoint, user, pass)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = enabledCors
+                        ) {
+                            Text("Connect CORS")
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { viewModel.disconnectCors() },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
+                        ) {
+                            Text("Disconnect CORS")
+                        }
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
 
-
-            OutlinedTextField(
-                value = user,
-                onValueChange = { user = it },
-                label = { Text("Username") },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabledCors
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = pass,
-                onValueChange = { pass = it },
-                label = { Text("Password") },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabledCors
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Button(
-                onClick = {
-                    viewModel.saveAndConnect(address, host, port, mountpoint, user, pass, enabled, enabledCors)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Text("Apply & Save Settings")
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            OutlinedButton(
-                onClick = { viewModel.disconnect() },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text("Disconnect All")
-            }
         }
     }
 }

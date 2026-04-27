@@ -42,6 +42,7 @@ import com.rbt.survey.ui.dgps.DgpsSettingsScreen
 import com.rbt.survey.ui.dgps.DgpsViewModel
 import com.rbt.survey.ui.dgps.DgpsViewModelFactory
 import com.rbt.survey.ui.dgps.SatelliteViewScreen
+import com.rbt.survey.ui.dgps.BluetoothDeviceListScreen
 import com.rbt.survey.ui.splash.SplashScreen
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -69,6 +70,7 @@ sealed class Screen(val route: String) {
 
     object DgpsSettings : Screen("dgps_settings")
     object SatelliteView : Screen("satellite_view")
+    object BluetoothDeviceList : Screen("bluetooth_device_list")
 }
 
 
@@ -238,7 +240,20 @@ fun AppNavigation() {
                     onBack = { navController.popBackStack() },
                     onNavigateToSatelliteView = {
                         navController.navigate(Screen.SatelliteView.route)
+                    },
+                    onNavigateToBluetoothList = {
+                        navController.navigate(Screen.BluetoothDeviceList.route)
                     }
+                )
+            }
+
+            composable(Screen.BluetoothDeviceList.route) {
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                BluetoothDeviceListScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
                 )
             }
 

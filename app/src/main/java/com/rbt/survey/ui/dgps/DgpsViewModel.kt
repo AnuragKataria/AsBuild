@@ -47,6 +47,63 @@ class DgpsViewModel(
         }
     }
 
+    fun selectBluetoothDevice(address: String) {
+        viewModelScope.launch {
+            userPreferences.saveDgpsSettings(
+                address = address,
+                host = null,
+                port = null,
+                mountpoint = null,
+                user = null,
+                pass = null,
+                useDgps = true,
+                useCors = true // keep as is
+            )
+            dgpsManager.connectBluetooth(address)
+        }
+    }
+
+    fun disconnectBluetooth() {
+        dgpsManager.disconnectBluetooth()
+    }
+
+    fun connectCors(
+        host: String,
+        port: String,
+        mountpoint: String,
+        user: String,
+        pass: String
+    ) {
+        viewModelScope.launch {
+            try {
+                val p = port.toIntOrNull() ?: return@launch
+                dgpsManager.connectNtrip(host, p, mountpoint, user, pass)
+                
+                // Save CORS settings
+                userPreferences.saveDgpsSettings(
+                    address = null,
+                    host = host,
+                    port = port,
+                    mountpoint = mountpoint,
+                    user = user,
+                    pass = pass,
+                    useDgps = true,
+                    useCors = true
+                )
+            } catch (e: Exception) {
+                if (e.message?.contains("401") == true) {
+                    _errorFlow.emit("CORS Authentication Failed (401). Check username/password.")
+                } else {
+                    _errorFlow.emit("CORS Error: ${e.localizedMessage}")
+                }
+            }
+        }
+    }
+
+    fun disconnectCors() {
+        dgpsManager.disconnectNtrip()
+    }
+
     fun saveAndConnect(
         address: String,
         host: String,
@@ -59,17 +116,11 @@ class DgpsViewModel(
     ) {
         viewModelScope.launch {
             userPreferences.saveDgpsSettings(address, host, port, mountpoint, user, pass, enabled, useCorsFlag)
-            if (enabled) {
-                dgpsManager.connect(
-                    address, 
-                    if (useCorsFlag) host else null, 
-                    if (useCorsFlag) port.toIntOrNull() else null, 
-                    if (useCorsFlag) mountpoint else null, 
-                    if (useCorsFlag) user else null, 
-                    if (useCorsFlag) pass else null
-                )
+            if (useCorsFlag && enabled) {
+                val p = port.toIntOrNull() ?: return@launch
+                dgpsManager.connectNtrip(host, p, mountpoint, user, pass)
             } else {
-                dgpsManager.disconnect()
+                dgpsManager.disconnectNtrip()
             }
         }
     }
@@ -78,14 +129,23 @@ class DgpsViewModel(
         dgpsManager.disconnect()
     }
 
+    private val _errorFlow = MutableSharedFlow<String>()
+    val errorFlow = _errorFlow.asSharedFlow()
+
     fun fetchMountpoints(host: String, port: String) {
         val p = port.toIntOrNull() ?: return
         viewModelScope.launch {
             _isFetchingMountpoints.value = true
             try {
-                _mountpoints.value = dgpsManager.fetchMountpoints(host, p)
+                val results = dgpsManager.fetchMountpoints(host, p)
+                if (results.isEmpty()) {
+                    _errorFlow.emit("No mountpoints found or host unreachable")
+                } else {
+                    _mountpoints.value = results
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
+                _errorFlow.emit("Connection error: ${e.localizedMessage}")
             } finally {
                 _isFetchingMountpoints.value = false
             }

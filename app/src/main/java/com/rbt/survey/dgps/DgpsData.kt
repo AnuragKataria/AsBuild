@@ -23,11 +23,17 @@ data class SatelliteInfo(
 
 fun getFixQualityString(quality: Int): String {
     return when (quality) {
-        1 -> "GPS Fix"
-        2 -> "DGPS Fix"
-        4 -> "RTK Fixed"
-        5 -> "RTK Float"
-        else -> "Invalid"
+        0 -> "Initialized"
+        1 -> "Single"
+        2 -> "Code Differential"
+        3 -> "Invalid PPS"
+        4 -> "Fixed"
+        5 -> "Float"
+        6 -> "Estimating"
+        7 -> "Manual Fixed Value"
+        8 -> "Simulated Mode"
+        9 -> "WAAS Differential"
+        else -> "Unknown"
     }
 }
 

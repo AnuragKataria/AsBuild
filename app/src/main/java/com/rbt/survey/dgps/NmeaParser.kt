@@ -46,11 +46,11 @@ class NmeaParser {
                 currentLocation.hrms
             } else {
                 when (fixQuality) {
-                    4 -> 0.02f // RTK Fixed (approx 2cm)
-                    5 -> 0.50f // RTK Float (approx 50cm)
-                    2 -> 2.0f  // DGPS
-                    1 -> hdop * 5.0f // Standard GPS
-                    else -> hdop * 10.0f
+                    4 -> 0.01f // RTK Fixed (approx 1cm)
+                    5 -> 0.15f // RTK Float (approx 15cm)
+                    2 -> 0.40f // DGPS (approx 40cm)
+                    1 -> hdop * 3.0f // Standard GPS (approx 3m)
+                    else -> hdop * 5.0f
                 }
             }
             

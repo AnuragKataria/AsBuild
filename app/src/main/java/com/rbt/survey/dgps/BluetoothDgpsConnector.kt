@@ -18,6 +18,7 @@ class BluetoothDgpsConnector(private val context: Context) {
 
     val status = MutableStateFlow<DgpsStatus>(DgpsStatus.Idle)
     val location = MutableStateFlow<DgpsLocation?>(null)
+    val rawNmea = kotlinx.coroutines.flow.MutableSharedFlow<String>()
     
     private val nmeaParser = NmeaParser()
 
@@ -51,6 +52,7 @@ class BluetoothDgpsConnector(private val context: Context) {
                         lineBuffer.delete(0, newlineIndex + 1)
                         
                         if (line.isNotEmpty()) {
+                            rawNmea.tryEmit(line)
                             val loc = nmeaParser.parse(line)
                             if (loc != null) {
                                 location.value = loc
