@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Looper
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -152,12 +153,43 @@ fun MapScreen(
                 },
                 actions = {
                     TextButton(onClick = {
-                        val resultValue = if (isMultiPointType) {
+                        val resultValue: String? = if (isMultiPointType) {
+                            // For multi-point maps, just save whatever points are drawn
                             gson.toJson(points)
                         } else {
-                            points.firstOrNull()?.let { "${it.latitude},${it.longitude}" } ?: ""
+                            // For single-point maps
+                            if (points.isNotEmpty()) {
+                                // User has tapped a point
+                                "${points.first().latitude},${points.first().longitude}"
+                            } else {
+                                // User hasn't tapped a point, check current location
+                                val lastLocation = fusedLocationClient.lastLocation
+                                lastLocation.addOnSuccessListener { location ->
+                                    if (location != null) {
+                                        val latLngString = "${location.latitude},${location.longitude}"
+                                        onSave(fieldId, latLngString)
+                                    } else {
+                                        // Location not fetched yet
+                                        Toast.makeText(
+                                            context,
+                                            "Please enable location and wait until your current location is available before saving.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }.addOnFailureListener {
+                                    Toast.makeText(
+                                        context,
+                                        "Unable to fetch current location. Make sure location is enabled.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                                // Return null to indicate we are handling save asynchronously
+                                null
+                            }
                         }
-                        onSave(fieldId, resultValue)
+
+                        // Only call onSave if resultValue is non-null (multi-point or user-tapped point)
+                        resultValue?.let { onSave(fieldId, it) }
                     }) {
                         Text("Save", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                     }
