@@ -356,6 +356,7 @@ fun AppNavigation() {
                     database.pendingFileUploadDao()
                 )
 
+
                 val viewModel: MapViewModel = viewModel(
                     factory = MapViewModelFactory(repository)
                 )
@@ -365,11 +366,14 @@ fun AppNavigation() {
                 }
                 val homeViewModel: HomeViewModel = viewModel(parentEntry)
 
+                val surveyRadius by homeViewModel.selectedSurveyRadius.collectAsState()
+
                 GpMapScreen(
                     viewModel = viewModel,
                     formId = formId,
                     blockCode = blockCode,
                     gpStatusList = homeViewModel.selectedGpStatusList.collectAsState().value,
+                    surveyRadius = surveyRadius,
                     onBack = {
                         navController.popBackStack()
                     },

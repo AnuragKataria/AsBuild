@@ -76,6 +76,36 @@ class HomeViewModel(
     private val _selectedTabIndex = MutableStateFlow(0)
     val selectedTabIndex: StateFlow<Int> = _selectedTabIndex.asStateFlow()
 
+    private val _selectedSurveyRadius = MutableStateFlow<Int?>(null)
+    val selectedSurveyRadius: StateFlow<Int?> = _selectedSurveyRadius
+
+    private val _selectedOfflineIds = MutableStateFlow<Set<Int>>(emptySet())
+    val selectedOfflineIds: StateFlow<Set<Int>> = _selectedOfflineIds
+
+    fun toggleSelection(id: Int) {
+        val current = _selectedOfflineIds.value.toMutableSet()
+
+        if (current.contains(id)) {
+            current.remove(id)
+        } else {
+            current.add(id)
+        }
+
+        _selectedOfflineIds.value = current
+    }
+
+    fun selectAllOffline(items: List<OfflineSubmission>) {
+        _selectedOfflineIds.value = items.map { it.id }.toSet()
+    }
+
+    fun clearSelection() {
+        _selectedOfflineIds.value = emptySet()
+    }
+
+    fun setSelectedSurveyRadius(radius: Int) {
+        _selectedSurveyRadius.value = radius
+    }
+
     fun setSelectedTabIndex(index: Int) {
         _selectedTabIndex.value = index
     }
@@ -103,6 +133,22 @@ class HomeViewModel(
 //    fun selectCompletedForm(form: FormData) {
 //        _completedSelectedForm.value = form
 //    }
+
+    fun deleteOfflineSubmission(submissionId: Int) {
+        viewModelScope.launch {
+            try {
+                val submission = repository.getOfflineSubmissionById(submissionId)
+                if (submission != null) {
+                    repository.deleteOfflineSubmission(submissionId)
+
+                    // 🔄 refresh list
+                    fetchOfflineSubmissions(submission.formId)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
 
     fun fetchCompletedBlockSummary(formId: Int) {
         viewModelScope.launch {
@@ -226,6 +272,72 @@ class HomeViewModel(
         }
     }
 
+    fun uploadSelectedOfflineSubmissions(
+        context: android.content.Context,
+        ids: List<Int>
+    ) {
+        viewModelScope.launch {
+
+            var successCount = 0
+            var failedCount = 0
+
+            _offlineLoading.value = true
+
+            try {
+                for (id in ids) {
+
+                    try {
+                        val submission = repository.getOfflineSubmissionById(id)
+
+                        if (submission != null) {
+
+                            val requestBody = submission.submissionData
+                                .toRequestBody("application/json".toMediaType())
+
+                            val response = repository.submitForm(
+                                submission.formId,
+                                requestBody
+                            )
+
+                            if (response.isSuccessful) {
+
+                                // ✅ delete from DB
+                                repository.deleteOfflineSubmission(id)
+
+                                // ✅ remove from UI list immediately
+                                _offlineSubmissions.value =
+                                    _offlineSubmissions.value.filter { it.id != id }
+
+                                successCount++
+
+                            } else {
+                                failedCount++
+                            }
+                        } else {
+                            failedCount++
+                        }
+
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        failedCount++
+                    }
+                }
+
+                // ✅ FINAL SUMMARY ONLY
+                android.widget.Toast.makeText(
+                    context,
+                    "Upload completed: $successCount success, $failedCount failed",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+
+                // clear selection after upload
+                clearSelection()
+
+            } finally {
+                _offlineLoading.value = false
+            }
+        }
+    }
     fun uploadSubmission(context: android.content.Context, submissionId: Int) {
         viewModelScope.launch {
             _offlineLoading.value = true

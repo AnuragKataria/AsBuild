@@ -32,6 +32,8 @@ import com.rbt.survey.data.local.db.OfflineSubmission
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.material3.TriStateCheckbox
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,6 +57,8 @@ fun HomeScreen(
 //    var expandedFormMenu by remember { mutableStateOf(false) }
     var expandedAssignedMenu by remember { mutableStateOf(false) }
     var expandedUploadedMenu by remember { mutableStateOf(false) }
+    var itemToDelete by remember { mutableStateOf<OfflineSubmission?>(null) }
+    val selectedIds by viewModel.selectedOfflineIds.collectAsState()
 
     val tabs = listOf("Assigned", "Completed", "Submitted", "Uploaded")
 
@@ -254,6 +258,7 @@ fun HomeScreen(
                                             summary = summary,
                                             onClick = { blockCode ->
                                                 viewModel.setSelectedGpStatusList(summary.gpList)
+                                                viewModel.setSelectedSurveyRadius(summary.surveyRadius)
                                                 selectedForm?.let {
                                                     onNavigateToMap(it.formId, blockCode)
                                                 }
@@ -343,13 +348,66 @@ fun HomeScreen(
                                 EmptyState("No submitted data offline")
                             } else {
                                 val context = androidx.compose.ui.platform.LocalContext.current
+                                val selectedIds by viewModel.selectedOfflineIds.collectAsState()
+
+                                val allSelected = offlineItems.isNotEmpty() &&
+                                        selectedIds.size == offlineItems.size
+
+                                val noneSelected = selectedIds.isEmpty()
+
+                                val selectAllState = when {
+                                    allSelected -> ToggleableState.On
+                                    noneSelected -> ToggleableState.Off
+                                    else -> ToggleableState.Indeterminate
+                                }
+                                
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+
+                                    // 🔹 Select All Checkbox
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+
+                                        TriStateCheckbox(
+                                            state = selectAllState,
+                                            onClick = {
+                                                if (allSelected) {
+                                                    viewModel.clearSelection()
+                                                } else {
+                                                    viewModel.selectAllOffline(offlineItems)
+                                                }
+                                            }
+                                        )
+
+                                        Text("Select All")
+                                    }
+
+                                    // 🔹 Upload Button
+                                    Button(
+                                        enabled = selectedIds.isNotEmpty(),
+                                        onClick = {
+                                            viewModel.uploadSelectedOfflineSubmissions(context, selectedIds.toList())
+                                        }
+                                    ) {
+                                        Text("Upload (${selectedIds.size})")
+                                    }
+                                }
+
                                 LazyColumn(
                                     verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
                                     items(offlineItems) { item ->
                                         OfflineSubmittedTile(
                                             item = item,
-                                            onClick = {
+                                            isSelected = selectedIds.contains(item.id),
+                                            onSelect = { checked ->
+                                                viewModel.toggleSelection(item.id)
+                                            },
+                                            onEditClick  = {
                                                 selectedForm?.let { form ->
                                                     onNavigateToEditOfflineSubmission(
                                                         form.formId,
@@ -359,8 +417,12 @@ fun HomeScreen(
                                                     )
                                                 }
                                             },
-                                            onUploadClick = {
-                                                viewModel.uploadSubmission(context, item.id)
+//                                            onUploadClick = {
+//                                                viewModel.uploadSubmission(context, item.id)
+//                                            },
+                                            onDeleteClick = {
+//                                                viewModel.deleteOfflineSubmission(item.id)
+                                                itemToDelete = item
                                             }
                                         )
                                     }
@@ -413,9 +475,32 @@ fun HomeScreen(
                     }
                 }
             }
-
-//            if (selectedTabIndex == 0) {
-//            }
+            itemToDelete?.let { submission ->
+                AlertDialog(
+                    onDismissRequest = { itemToDelete = null },
+                    title = { Text("Delete Confirmation") },
+                    text = { Text("Are you sure you want to delete this data?") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                viewModel.deleteOfflineSubmission(submission.id)
+                                itemToDelete = null   // close dialog
+                            }
+                        ) {
+                            Text("OK")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                itemToDelete = null   // cancel
+                            }
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -497,9 +582,15 @@ fun formatDateTime(input: String?): String {
 }
 
 @Composable
-fun OfflineSubmittedTile(item: OfflineSubmission, onClick: () -> Unit, onUploadClick: () -> Unit) {
+fun OfflineSubmittedTile(
+    item: OfflineSubmission,
+    isSelected: Boolean,
+    onSelect: (Boolean) -> Unit,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -507,6 +598,12 @@ fun OfflineSubmittedTile(item: OfflineSubmission, onClick: () -> Unit, onUploadC
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onSelect(it) }
+            )
+
+            Spacer(modifier = Modifier.width(5.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "ID : ${item.id} (Offline)",
@@ -537,11 +634,28 @@ fun OfflineSubmittedTile(item: OfflineSubmission, onClick: () -> Unit, onUploadC
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            
-            Button(onClick = onUploadClick) {
-                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Upload")
+
+            Column {
+//                Button(onClick = onUploadClick) {
+//                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+//                    Spacer(modifier = Modifier.width(8.dp))
+//                    Text("Upload")
+//                }
+                Button(onClick = onEditClick) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Edit")
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = onDeleteClick
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Delete")
+                }
             }
         }
     }

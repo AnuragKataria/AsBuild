@@ -3,6 +3,8 @@ package com.rbt.survey.ui.map
 import android.content.Context
 import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -46,8 +48,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import com.rbt.survey.R
+import com.rbt.survey.data.helper.LocationHelper
+import kotlinx.coroutines.launch
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.compose.foundation.background
+import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +66,7 @@ fun MapScreen(
     formId: Int,
     blockCode: String?,
     gpStatusList: List<GpItem>,
+    surveyRadius: Int?,
     onBack: () -> Unit,
     onMarkerClick: (Int, String?,String?) -> Unit
 ) {
@@ -73,6 +84,40 @@ fun MapScreen(
 
     val mapType by viewModel.mapType.collectAsState()
     var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val locationHelper = remember { LocationHelper(context) }
+    val coroutineScope = rememberCoroutineScope()
+    var isCheckingLocation by remember { mutableStateOf(false) }
+    var loadingMessage by remember { mutableStateOf("Please wait...") }
+    val bypassValidation by viewModel.bypassValidation.collectAsState()
+
+    var hasPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasPermission = granted
+        if (!granted) {
+            Toast.makeText(
+                context,
+                "Location permission is required to show your location",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasPermission) {
+            permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
 
     // Load data
     LaunchedEffect(formId, blockCode) {
@@ -113,11 +158,11 @@ fun MapScreen(
                 .padding(paddingValues)
         ) {
 
-            // ✅ MAP
+            //  MAP
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
-                properties = MapProperties(mapType = mapType)
+                properties = MapProperties(mapType = mapType,isMyLocationEnabled = hasPermission)
             ) {
 
                 gpList.forEach { gp ->
@@ -140,18 +185,76 @@ fun MapScreen(
                         ),
                         icon = BitmapDescriptorFactory.fromBitmap(markerBitmap),
                         onClick = {
+
                             if (gp.isCompleted) {
-                                // 🟢 Completed → show message
                                 Toast.makeText(
                                     context,
                                     "You already filled the form for this GP",
                                     Toast.LENGTH_SHORT
                                 ).show()
-                            } else {
-                                // 🔴 Not completed → navigate
-                                onMarkerClick(formId, blockCode, gp.name)
+                                return@Marker true
                             }
 
+                            //this is for testing we have to remove later on production
+                            if (bypassValidation) {
+                                onMarkerClick(formId, blockCode, gp.name)
+                                return@Marker true
+                            }
+
+                            coroutineScope.launch {
+
+                                isCheckingLocation = true
+                                try {
+                                    loadingMessage = "Checking GPS..."
+                                    //  Check GPS enabled
+                                    if (!locationHelper.isLocationEnabled()) {
+                                        Toast.makeText(
+                                            context,
+                                            "Please enable location",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        return@launch
+                                    }
+
+                                    loadingMessage = "Fetching current location..."
+                                    //  Get current location
+                                    val location = locationHelper.getCurrentLocation()
+
+                                    if (location == null) {
+                                        Toast.makeText(
+                                            context,
+                                            "Unable to fetch current location",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                        return@launch
+                                    }
+
+                                    loadingMessage = "Calculating distance..."
+                                    //  Check radius
+                                    val isInside = viewModel.isInsideRadius(
+                                        userLat = location.latitude,
+                                        userLng = location.longitude,
+                                        gpLat = gp.lat,
+                                        gpLng = gp.lng,
+                                        radius = surveyRadius ?: 0
+                                    )
+
+                                    if (isInside) {
+                                        // allow
+                                        onMarkerClick(formId, blockCode, gp.name)
+                                    } else {
+                                        // block
+                                        Toast.makeText(
+                                            context,
+                                            "You are outside survey area",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }finally {
+                                    isCheckingLocation = false
+                                    loadingMessage = "Please wait..."
+                                }
+                            }
                             true
                         }
                     )
@@ -263,6 +366,56 @@ fun MapScreen(
                             }
                         }
                     }
+                }
+            }
+            if (isCheckingLocation) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.4f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                        CircularProgressIndicator()
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = loadingMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = androidx.compose.ui.graphics.Color.White
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.TopStart
+            ) {
+                Row(
+                    modifier = Modifier
+                        .background(
+                            color = androidx.compose.ui.graphics.Color.White,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    androidx.compose.material3.Checkbox(
+                        checked = bypassValidation,
+                        onCheckedChange = { viewModel.setBypassValidation(it) }
+                    )
+
+                    Text(
+                        text = "Test Mode",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.ui.graphics.Color.Black
+                    )
                 }
             }
         }

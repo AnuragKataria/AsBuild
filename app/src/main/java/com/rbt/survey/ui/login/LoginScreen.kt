@@ -28,7 +28,7 @@ fun LoginScreen(
     viewModel: LoginViewModel,
     onLoginSuccess: () -> Unit
 ) {
-    var email by remember { mutableStateOf("vikasyadav123@gmail.com") }
+    var email by remember { mutableStateOf("vikas@gmail.com") }
     var password by remember { mutableStateOf("12345678") }
     var isPasswordVisible by remember { mutableStateOf(false) }
     

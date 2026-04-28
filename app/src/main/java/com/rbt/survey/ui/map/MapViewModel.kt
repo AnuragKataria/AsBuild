@@ -28,6 +28,13 @@ class MapViewModel(
     private val _mapType = MutableStateFlow(MapType.NORMAL)
     val mapType: StateFlow<MapType> = _mapType
 
+    private val _bypassValidation = MutableStateFlow(false)
+    val bypassValidation: StateFlow<Boolean> = _bypassValidation
+
+    fun setBypassValidation(value: Boolean) {
+        _bypassValidation.value = value
+    }
+
     fun setMapType(type: MapType) {
         _mapType.value = type
     }
@@ -119,5 +126,28 @@ class MapViewModel(
 
             _isLoading.value = false
         }
+    }
+
+    fun isInsideRadius(
+        userLat: Double,
+        userLng: Double,
+        gpLat: Double,
+        gpLng: Double,
+        radius: Int
+    ): Boolean {
+
+        val results = FloatArray(1)
+
+        android.location.Location.distanceBetween(
+            userLat,
+            userLng,
+            gpLat,
+            gpLng,
+            results
+        )
+
+        val distance = results[0]
+
+        return distance <= radius
     }
 }

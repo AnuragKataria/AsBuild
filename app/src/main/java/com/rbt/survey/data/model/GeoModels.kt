@@ -35,6 +35,7 @@ data class BlockSummaryResponse(
 data class BlockSummary(
     @SerializedName("blockCode") val blockCode: String,
     @SerializedName("blockName") val blockName: String,
+    @SerializedName("surveyRadius") val surveyRadius: Int,
     @SerializedName("completedPercentage") val completedPercentage: Int,
     @SerializedName("pendingPercentage") val pendingPercentage: Int,
     @SerializedName("totalGP") val totalGP: Int,
