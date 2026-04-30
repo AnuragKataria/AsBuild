@@ -33,10 +33,12 @@ class FormDataCollectionViewModel(
     private val preferences: UserPreferences,
     private val selectedGpName: String?,
     private val dgpsManager: DgpsManager,
-    private val submissionId: Int? = null
+    private val submissionId: Int? = null,
+    private val radius: Int? = null
 ) : ViewModel() {
     private val saveJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
 
+    val surveyRadius: Int? = radius
     private val _submitSuccess = MutableStateFlow(false)
     val submitSuccess: StateFlow<Boolean> = _submitSuccess
 
@@ -91,7 +93,7 @@ class FormDataCollectionViewModel(
             }
         } else {
             viewModelScope.launch {
-                val drafts = repository.getDrafts(formId)
+                val drafts = repository.getDrafts(formId, selectedGpName ?: "")
                 drafts.forEach { draft ->
                     val value: Any? = try {
                         when {
@@ -222,7 +224,7 @@ class FormDataCollectionViewModel(
 
                     saveJobs[f.id]?.cancel()
                     saveJobs[f.id] = viewModelScope.launch {
-                        repository.saveDraft(formId, f.id, "")
+                        repository.saveDraft(formId, f.id,selectedGpName ?: "", "")
                     }
                 }
             }
@@ -236,7 +238,7 @@ class FormDataCollectionViewModel(
             } else {
                 newValue?.toString() ?: ""
             }
-            repository.saveDraft(formId, fieldId, stringValue)
+            repository.saveDraft(formId, fieldId,selectedGpName ?: "", stringValue)
         }
 
         // Trigger immediate upload if it's a file type
@@ -253,7 +255,7 @@ class FormDataCollectionViewModel(
                 if (dep.field == fieldId && dep.clearOnParentChange) {
                     fieldValues.remove(f.id)
                     saveJobs[f.id]?.cancel()
-                    saveJobs[f.id] = viewModelScope.launch { repository.saveDraft(formId, f.id, "") }
+                    saveJobs[f.id] = viewModelScope.launch { repository.saveDraft(formId, f.id,selectedGpName ?: "", "") }
                     onFieldValueChange(f.id, null, fields, context) 
                 }
             }
@@ -407,7 +409,7 @@ class FormDataCollectionViewModel(
                     // We can save the fileId or the whole JSON response as the field value
                     if (fileData != null) {
                         val responseJson = gson.toJson(fileData)
-                        repository.saveDraft(formId, fieldId, responseJson)
+                        repository.saveDraft(formId, fieldId,selectedGpName ?: "", responseJson)
                         // Also update memory state so the UI reflects the uploaded status
                         fieldValues[fieldId] = responseJson
                     }
@@ -652,13 +654,14 @@ class FormDataCollectionViewModel(
                     formId = formId,
                     blockCode = terminalBlockCode ?: blockCode,
                     gp = dataMap["GP"]?.toString(),
-                    submissionData = jsonRequest
+                    submissionData = jsonRequest,
+                    surveyRadius = surveyRadius
                 )
                 repository.saveOfflineSubmission(submission)
                 
                 android.widget.Toast.makeText(context, "Form saved offline successfully!", android.widget.Toast.LENGTH_LONG).show()
                 // Clear drafts on success
-                repository.clearDrafts(formId)
+                repository.clearDrafts(formId, selectedGpName ?: "")
                 fieldValues.clear()
 
                 _submitSuccess.value = true

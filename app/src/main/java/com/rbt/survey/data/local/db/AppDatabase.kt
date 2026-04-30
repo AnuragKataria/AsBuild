@@ -4,10 +4,11 @@ import androidx.room.*
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.room.migration.Migration
 
-@Entity(tableName = "form_drafts", primaryKeys = ["formId", "fieldId"])
+@Entity(tableName = "form_drafts", primaryKeys = ["formId", "fieldId", "gp"])
 data class FormDraft(
     val formId: Int,
     val fieldId: String,
+    val gp: String,
     val value: String
 )
 
@@ -42,11 +43,11 @@ interface FormDraftDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveDraft(draft: FormDraft)
 
-    @Query("SELECT * FROM form_drafts WHERE formId = :formId")
-    suspend fun getDraftsForForm(formId: Int): List<FormDraft>
+    @Query("SELECT * FROM form_drafts WHERE formId = :formId AND gp = :gp")
+    suspend fun getDraftsForForm(formId: Int, gp: String): List<FormDraft>
 
-    @Query("DELETE FROM form_drafts WHERE formId = :formId")
-    suspend fun clearDraftsForForm(formId: Int)
+    @Query("DELETE FROM form_drafts WHERE formId = :formId AND gp = :gp")
+    suspend fun clearDraftsForForm(formId: Int, gp: String)
 }
 
 @Dao

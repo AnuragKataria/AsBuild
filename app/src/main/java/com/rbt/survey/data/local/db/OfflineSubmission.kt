@@ -15,6 +15,7 @@ data class OfflineSubmission(
     val blockCode: String?,
     val gp: String?,
     val submissionData: String, // JSON representation of the form data
+    val surveyRadius: Int? = null,
     val timestamp: Long = System.currentTimeMillis()
 )
 

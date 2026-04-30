@@ -4,10 +4,12 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +26,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.*
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
@@ -37,6 +40,7 @@ fun MapScreen(
     type: String,
     fieldId: String,
     initialValue: String,
+    radius: Int?,
     onBack: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
@@ -47,6 +51,12 @@ fun MapScreen(
 
     var mapType by remember { mutableStateOf(MapType.NORMAL) }
     var showMapTypeDialog by remember { mutableStateOf(false) }
+    var showChoiceDialog by remember { mutableStateOf(false) }
+    var tempCurrentLocation by remember { mutableStateOf<LatLng?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+    var loadingMessage by remember { mutableStateOf("Please Wait...") }
+
+    var useCurrentLocationDirectly by remember { mutableStateOf(false) }
 
     // Parse initial value
     val initialPoints = remember {
@@ -54,6 +64,41 @@ fun MapScreen(
             if (isMultiPointType) {
                 val listType = object : TypeToken<List<LatLng>>() {}.type
                 gson.fromJson<List<LatLng>>(initialValue, listType) ?: emptyList()
+            } else if (initialValue.contains("coordinates")) {
+                try {
+                    val coords: List<Double>? = when {
+                        // ✅ Case 1: Proper JSON
+                        initialValue.trim().startsWith("{\"") -> {
+                            val jsonObject = com.google.gson.JsonParser.parseString(initialValue).asJsonObject
+                            val array = jsonObject.getAsJsonArray("coordinates")
+                            array?.map { it.asDouble }
+                        }
+
+                        // ✅ Case 2: Map-like string → {type=Point, coordinates=[...]}
+                        initialValue.contains("coordinates=[") -> {
+                            val coordPart = initialValue
+                                .substringAfter("coordinates=[")
+                                .substringBefore("]")
+
+                            coordPart.split(",").mapNotNull {
+                                it.trim().toDoubleOrNull()
+                            }
+                        }
+
+                        else -> null
+                    }
+
+                    if (coords != null && coords.size == 2) {
+                        val lng = coords[0]
+                        val lat = coords[1]
+                        listOf(LatLng(lat, lng))
+                    } else {
+                        emptyList()
+                    }
+
+                } catch (e: Exception) {
+                    emptyList()
+                }
             } else if (initialValue.contains(",")) {
                 val parts = initialValue.split(",")
                 listOf(LatLng(parts[0].toDouble(), parts[1].toDouble()))
@@ -64,6 +109,7 @@ fun MapScreen(
             emptyList()
         }
     }
+    val hasExistingLocation = initialPoints.isNotEmpty()
 
     var points by remember { mutableStateOf(initialPoints) }
     var isTracking by remember { mutableStateOf(false) }
@@ -136,6 +182,20 @@ fun MapScreen(
         }
     }
 
+    LaunchedEffect(points, radius) {
+        if (!isMultiPointType && points.isNotEmpty() && radius != null) {
+
+            val bounds = getBoundsForCircle(points.first(), radius.toDouble())
+
+            try {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngBounds(bounds, 100)
+                )
+            } catch (e: Exception) {
+                // fallback
+            }
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -153,43 +213,103 @@ fun MapScreen(
                 },
                 actions = {
                     TextButton(onClick = {
-                        val resultValue: String? = if (isMultiPointType) {
-                            // For multi-point maps, just save whatever points are drawn
-                            gson.toJson(points)
-                        } else {
-                            // For single-point maps
-                            if (points.isNotEmpty()) {
-                                // User has tapped a point
-                                "${points.first().latitude},${points.first().longitude}"
-                            } else {
-                                // User hasn't tapped a point, check current location
-                                val lastLocation = fusedLocationClient.lastLocation
-                                lastLocation.addOnSuccessListener { location ->
-                                    if (location != null) {
-                                        val latLngString = "${location.latitude},${location.longitude}"
-                                        onSave(fieldId, latLngString)
-                                    } else {
-                                        // Location not fetched yet
-                                        Toast.makeText(
-                                            context,
-                                            "Please enable location and wait until your current location is available before saving.",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
-                                }.addOnFailureListener {
-                                    Toast.makeText(
-                                        context,
-                                        "Unable to fetch current location. Make sure location is enabled.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                                // Return null to indicate we are handling save asynchronously
-                                null
-                            }
+
+                        if (isMultiPointType) {
+                            onSave(fieldId, gson.toJson(points))
+                            return@TextButton
                         }
 
-                        // Only call onSave if resultValue is non-null (multi-point or user-tapped point)
-                        resultValue?.let { onSave(fieldId, it) }
+                        // ✅ TEST MODE (checkbox checked)
+                        if (useCurrentLocationDirectly) {
+
+                            if (!isLocationEnabled(context)) {
+                                Toast.makeText(context, "Please enable location", Toast.LENGTH_LONG).show()
+                                return@TextButton
+                            }
+
+                            isLoading = true
+                            loadingMessage = "Fetching location..."
+
+                            getFreshLocation(
+                                context,
+                                fusedLocationClient,
+                                onLocation = { currentLatLng ->
+
+                                    isLoading = false
+
+                                    // still show choice dialog
+                                    tempCurrentLocation = currentLatLng
+                                    showChoiceDialog = true
+                                },
+                                onError = {
+                                    isLoading = false
+                                    Toast.makeText(context, "Unable to fetch location", Toast.LENGTH_LONG).show()
+                                }
+                            )
+
+                            return@TextButton
+                        }
+
+
+                        // ✅ SCENARIO 2 & 3 HANDLING
+
+                        // Step 1: Check GPS
+                        if (!isLocationEnabled(context)) {
+                            Toast.makeText(context, "Please enable location", Toast.LENGTH_LONG).show()
+                            return@TextButton
+                        }
+
+                        isLoading = true
+                        loadingMessage = "Fetching location..."
+
+                        // Step 2: Get CURRENT location (real-time)
+                        getFreshLocation(
+                            context,
+                            fusedLocationClient,
+                            onLocation = { currentLatLng ->
+
+                                loadingMessage = "Calculating distance..."
+
+                                // ✅ CASE 2: LatLng + Radius exists
+                                if (initialPoints.isNotEmpty() && radius != null) {
+
+                                    val existingPoint = initialPoints.first()
+                                    val distance = distanceBetween(existingPoint, currentLatLng)
+
+                                    if (distance > radius) {
+                                        isLoading = false
+                                        Toast.makeText(context, "You are outside allowed radius", Toast.LENGTH_LONG).show()
+                                    } else {
+
+                                        isLoading = false
+                                        // Show choice dialog
+                                        showChoiceDialog = true
+
+                                        // Store temp current location
+                                        tempCurrentLocation = currentLatLng
+                                    }
+
+                                }
+                                // ✅ CASE 3: Only radius (no latlng)
+                                else if (initialPoints.isEmpty() && radius != null) {
+
+                                    val value = "${currentLatLng.latitude},${currentLatLng.longitude}"
+                                    isLoading = false
+                                    onSave(fieldId, value)
+                                }
+                                // ✅ Normal single point (no radius)
+                                else {
+                                    val value = "${currentLatLng.latitude},${currentLatLng.longitude}"
+                                    isLoading = false
+                                    onSave(fieldId, value)
+                                }
+                            },
+                            onError = {
+                                isLoading = false
+                                Toast.makeText(context, "Unable to fetch location", Toast.LENGTH_LONG).show()
+                            }
+                        )
+
                     }) {
                         Text("Save", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                     }
@@ -204,12 +324,17 @@ fun MapScreen(
                 properties = MapProperties(isMyLocationEnabled = hasLocationPermission,mapType = mapType),
                 uiSettings = MapUiSettings(myLocationButtonEnabled = true),
                 onMapClick = { latLng ->
+//                    if (!isTracking) {
+//                        if (isMultiPointType) {
+//                            points = points + latLng
+//                        } else {
+//                            points = listOf(latLng)
+//                        }
+//                    }
+                    if (!isMultiPointType) return@GoogleMap
+
                     if (!isTracking) {
-                        if (isMultiPointType) {
-                            points = points + latLng
-                        } else {
-                            points = listOf(latLng)
-                        }
+                        points = points + latLng
                     }
                 }
             ) {
@@ -236,7 +361,20 @@ fun MapScreen(
                     }
                 } else {
                     points.firstOrNull()?.let { point ->
+
+                        // ✅ Marker
                         Marker(state = MarkerState(position = point))
+
+                        // ✅ Radius Circle (only if radius exists)
+                        if (radius != null) {
+                            Circle(
+                                center = point,
+                                radius = radius.toDouble(), // meters
+                                strokeColor = Color.Blue,
+                                strokeWidth = 3f,
+                                fillColor = Color.Red.copy(alpha = 0.15f)
+                            )
+                        }
                     }
                 }
             }
@@ -347,7 +485,7 @@ fun MapScreen(
                     }
                 }
 
-                if (!isTracking) {
+                if (!isTracking && isMultiPointType) {
                     if (points.isNotEmpty()) {
                         FloatingActionButton(
                             onClick = { points = points.dropLast(1) },
@@ -418,6 +556,88 @@ fun MapScreen(
                     }
                 }
             }
+
+            if (showChoiceDialog) {
+                AlertDialog(
+                    onDismissRequest = { showChoiceDialog = false },
+                    title = { Text("Choose Location") },
+                    text = { Text("Do you want to keep existing location or save current location?") },
+
+                    confirmButton = {
+                        TextButton(onClick = {
+                            // ✅ Save CURRENT location
+                            showChoiceDialog = false
+
+                            tempCurrentLocation?.let {
+                                val value = "${it.latitude},${it.longitude}"
+                                onSave(fieldId, value)
+                            }
+                        }) {
+                            Text("Save Current Location")
+                        }
+                    },
+
+                    dismissButton = {
+                        TextButton(onClick = {
+                            // ✅ Keep EXISTING location
+                            showChoiceDialog = false
+                            onBack()
+                        }) {
+                            Text("Use Existing Location")
+                        }
+                    }
+                )
+            }
+
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.4f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                        CircularProgressIndicator()
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = loadingMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = androidx.compose.ui.graphics.Color.White
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.TopStart
+            ) {
+                Row(
+                    modifier = Modifier
+                        .background(
+                            color = androidx.compose.ui.graphics.Color.White,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    Checkbox(
+                        checked = useCurrentLocationDirectly,
+                        onCheckedChange = { useCurrentLocationDirectly = it }
+                    )
+
+                    Text(
+                        text = "Test Mode",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.ui.graphics.Color.Black
+                    )
+                }
+            }
         }
     }
 }
@@ -449,6 +669,57 @@ fun MapTypeItem(
             color = Color.Black
         )
     }
+}
+
+
+@SuppressLint("MissingPermission")
+private fun getFreshLocation(
+    context: android.content.Context,
+    fusedLocationClient: FusedLocationProviderClient,
+    onLocation: (LatLng) -> Unit,
+    onError: () -> Unit
+) {
+    val locationRequest = LocationRequest.Builder(
+        Priority.PRIORITY_HIGH_ACCURACY, 1000L
+    ).setMaxUpdates(1).build()
+
+    val callback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            fusedLocationClient.removeLocationUpdates(this)
+            val location = result.lastLocation
+            if (location != null) {
+                onLocation(LatLng(location.latitude, location.longitude))
+            } else {
+                onError()
+            }
+        }
+    }
+
+    try {
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            callback,
+            Looper.getMainLooper()
+        )
+    } catch (e: Exception) {
+        onError()
+    }
+}
+
+private fun getBoundsForCircle(center: LatLng, radius: Double): com.google.android.gms.maps.model.LatLngBounds {
+    val distance = radius / 111320f // approx meters to degrees
+
+    val southWest = LatLng(
+        center.latitude - distance,
+        center.longitude - distance
+    )
+
+    val northEast = LatLng(
+        center.latitude + distance,
+        center.longitude + distance
+    )
+
+    return com.google.android.gms.maps.model.LatLngBounds(southWest, northEast)
 }
 
 private fun distanceBetween(p1: LatLng, p2: LatLng): Float {

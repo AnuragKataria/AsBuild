@@ -1,5 +1,6 @@
 package com.rbt.survey.ui.home
 
+import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,7 +42,7 @@ import androidx.compose.material3.TriStateCheckbox
 fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigateToMap: (Int, String?) -> Unit,
-    onNavigateToEditOfflineSubmission: (Int, Int, String?, String?) -> Unit,
+    onNavigateToEditOfflineSubmission: (Int, Int, String?, String?, Int?) -> Unit,
     onLogout: () -> Unit,
     onNavigateToDgpsSettings: () -> Unit
 ) {
@@ -262,6 +263,14 @@ fun HomeScreen(
                                                 selectedForm?.let {
                                                     onNavigateToMap(it.formId, blockCode)
                                                 }
+                                            },
+                                            onDownloadClick = { blockCode ->
+                                                selectedForm?.let { form ->
+                                                    viewModel.downloadBlockData(
+                                                        formId = form.formId,
+                                                        blockCode = blockCode
+                                                    )
+                                                }
                                             }
                                         )
                                     }
@@ -313,6 +322,14 @@ fun HomeScreen(
                                                     viewModel.setSelectedGpStatusList(summary.gpList)
                                                     selectedForm?.let {
                                                         onNavigateToMap(it.formId, blockCode)
+                                                    }
+                                                },
+                                                onDownloadClick = { blockCode ->
+                                                    selectedForm?.let { form ->
+                                                        viewModel.downloadBlockData(
+                                                            formId = form.formId,
+                                                            blockCode = blockCode
+                                                        )
                                                     }
                                                 }
                                             )
@@ -413,7 +430,8 @@ fun HomeScreen(
                                                         form.formId,
                                                         item.id,
                                                         item.blockCode,
-                                                        item.gp
+                                                        item.gp,
+                                                        item.surveyRadius
                                                     )
                                                 }
                                             },
@@ -834,7 +852,8 @@ fun InfoChip(label: String, value: String) {
 @Composable
 fun BlockSummaryCard(
     summary: BlockSummary,
-    onClick: (String) -> Unit
+    onClick: (String) -> Unit,
+    onDownloadClick: (String) -> Unit
 ) {
 
     Card(
@@ -850,18 +869,35 @@ fun BlockSummaryCard(
         Column(modifier = Modifier.padding(16.dp)) {
 
             // 🔹 Block header (NO CLICK, NO EXPAND)
-            Column {
-                Text(
-                    text = summary.blockName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Code: ${summary.blockCode}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = summary.blockName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Code: ${summary.blockCode}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        onDownloadClick(summary.blockCode)
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Download"
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))

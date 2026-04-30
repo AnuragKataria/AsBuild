@@ -1,7 +1,5 @@
 package com.rbt.survey.ui.map
 
-import android.content.Context
-import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -9,13 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -42,7 +37,6 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.rbt.survey.data.model.GpItem
-import com.rbt.survey.data.model.GpStatus
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -68,7 +62,7 @@ fun MapScreen(
     gpStatusList: List<GpItem>,
     surveyRadius: Int?,
     onBack: () -> Unit,
-    onMarkerClick: (Int, String?,String?) -> Unit
+    onMarkerClick: (Int, String?, String?, Int?) -> Unit
 ) {
 
     val gpList by viewModel.gpList.collectAsState()
@@ -197,7 +191,7 @@ fun MapScreen(
 
                             //this is for testing we have to remove later on production
                             if (bypassValidation) {
-                                onMarkerClick(formId, blockCode, gp.name)
+                                onMarkerClick(formId, blockCode, gp.name,surveyRadius)
                                 return@Marker true
                             }
 
@@ -241,7 +235,7 @@ fun MapScreen(
 
                                     if (isInside) {
                                         // allow
-                                        onMarkerClick(formId, blockCode, gp.name)
+                                        onMarkerClick(formId, blockCode, gp.name,surveyRadius)
                                     } else {
                                         // block
                                         Toast.makeText(

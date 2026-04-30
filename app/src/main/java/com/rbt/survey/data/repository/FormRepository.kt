@@ -131,16 +131,16 @@ class FormRepository(
         }
     }
 
-    suspend fun saveDraft(formId: Int, fieldId: String, value: String) {
-        draftDao.saveDraft(FormDraft(formId, fieldId, value))
+    suspend fun saveDraft(formId: Int, fieldId: String, gp: String, value: String) {
+        draftDao.saveDraft(FormDraft(formId, fieldId,gp, value))
     }
 
-    suspend fun getDrafts(formId: Int): List<FormDraft> {
-        return draftDao.getDraftsForForm(formId)
+    suspend fun getDrafts(formId: Int, gp: String): List<FormDraft> {
+        return draftDao.getDraftsForForm(formId,gp)
     }
 
-    suspend fun clearDrafts(formId: Int) {
-        draftDao.clearDraftsForForm(formId)
+    suspend fun clearDrafts(formId: Int, gp: String) {
+        draftDao.clearDraftsForForm(formId,gp)
     }
 
     suspend fun saveOfflineSubmission(submission: OfflineSubmission) {

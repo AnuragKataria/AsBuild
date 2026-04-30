@@ -13,12 +13,13 @@ class FormDataCollectionViewModelFactory(
     private val preferences: UserPreferences,
     private val gpName: String?,
     private val dgpsManager: DgpsManager,
-    private val submissionId: Int? = null
+    private val submissionId: Int? = null,
+    private val radius: Int? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(FormDataCollectionViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return FormDataCollectionViewModel(formId, blockCode, repository, preferences, gpName, dgpsManager, submissionId) as T
+            return FormDataCollectionViewModel(formId, blockCode, repository, preferences, gpName, dgpsManager, submissionId,radius) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

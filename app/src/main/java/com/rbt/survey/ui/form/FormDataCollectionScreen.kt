@@ -41,6 +41,7 @@ import android.graphics.Color as AndroidColor
 import android.location.Location
 import android.location.Geocoder
 import android.os.Build
+import android.util.Log
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,7 +59,7 @@ import androidx.lifecycle.viewModelScope
 fun FormDataCollectionScreen(
     viewModel: FormDataCollectionViewModel,
     onBack: () -> Unit,
-    onNavigateToMap: (String, String, String) -> Unit,
+    onNavigateToMap: (String, String, String, Int?) -> Unit,
     navController: androidx.navigation.NavController,
     onSubmitSuccess: () -> Unit
 ) {
@@ -206,7 +207,7 @@ fun DynamicField(
     field: FormField,
     allFields: List<FormField>,
     viewModel: FormDataCollectionViewModel,
-    onNavigateToMap: (String, String, String) -> Unit,
+    onNavigateToMap: (String, String, String, Int?) -> Unit,
     error: String? = null
 ) {
     val currentValue = viewModel.fieldValues[field.id]
@@ -458,7 +459,7 @@ fun DynamicField(
                         value = resolvedAddress,
                         onValueChange = {},
                         modifier = Modifier.fillMaxWidth().clickable {
-                            onNavigateToMap(mapType, field.id, currentValue?.toString() ?: "")
+                            onNavigateToMap(mapType, field.id, currentValue?.toString() ?: "",viewModel.surveyRadius)
                         },
                         placeholder = { Text("Tap to select $mapType") },
                         shape = MaterialTheme.shapes.medium,
@@ -468,7 +469,7 @@ fun DynamicField(
                         supportingText = { if (error != null) Text(error) },
                         trailingIcon = {
                             IconButton(onClick = {
-                                onNavigateToMap(mapType, field.id, currentValue?.toString() ?: "")
+                                onNavigateToMap(mapType, field.id, currentValue?.toString() ?: "",viewModel.surveyRadius)
                             }) {
                                 val icon = when(mapType) {
                                     "Polygon" -> Icons.Default.Polyline

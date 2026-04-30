@@ -1,5 +1,6 @@
 package com.rbt.survey.ui.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rbt.survey.data.local.UserPreferences
@@ -269,6 +270,26 @@ class HomeViewModel(
     fun logout() {
         viewModelScope.launch {
             preferences.clearAuthData()
+        }
+    }
+
+    fun downloadBlockData(formId: Int, blockCode: String) {
+        viewModelScope.launch {
+            try {
+
+                val userId = preferences.userId.first() ?: return@launch
+                // 1. Fetch block summary (GP points)
+                geoRepository.getBlockSummary(userId, formId)
+
+                // 2. Fetch form detail for that block
+                repository.getFormDetail(formId, blockCode)
+
+                // Done
+                Log.d("DOWNLOAD", "Block downloaded successfully")
+
+            } catch (e: Exception) {
+                Log.e("DOWNLOAD", "Failed", e)
+            }
         }
     }
 

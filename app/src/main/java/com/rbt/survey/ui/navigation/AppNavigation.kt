@@ -55,17 +55,17 @@ sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Login : Screen("login")
     object Home : Screen("home")
-    object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}&submissionId={submissionId}") {
-        fun createRoute(formId: Int, blockCode: String?, gpName: String?, submissionId: Int? = null) = "form_data/$formId?blockCode=${blockCode ?: ""}&gpName=${gpName ?: ""}&submissionId=${submissionId ?: -1}"
+    object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}&surveyRadius={surveyRadius}&submissionId={submissionId}") {
+        fun createRoute(formId: Int, blockCode: String?, gpName: String?,surveyRadius: Int?, submissionId: Int? = null) = "form_data/$formId?blockCode=${blockCode ?: ""}&gpName=${gpName ?: ""}&surveyRadius=${surveyRadius ?: -1}&submissionId=${submissionId ?: -1}"
     }
     object GPMap : Screen("gp_map/{formId}/{blockCode}") {
         fun createRoute(formId: Int, blockCode: String) =
             "gp_map/$formId/$blockCode"
     }
 
-    object FormMap : Screen("form_map/{type}/{fieldId}/{initialValue}") {
-        fun createRoute(type: String, fieldId: String, initialValue: String) =
-            "form_map/$type/$fieldId/${URLEncoder.encode(initialValue, "UTF-8")}"
+    object FormMap : Screen("form_map/{type}/{fieldId}/{initialValue}?radius={radius}") {
+        fun createRoute(type: String, fieldId: String, initialValue: String, radius: Int?) =
+            "form_map/$type/$fieldId/${URLEncoder.encode(initialValue, "UTF-8")}?radius=${radius ?: -1}"
     }
 
     object DgpsSettings : Screen("dgps_settings")
@@ -212,10 +212,10 @@ fun AppNavigation() {
                             }
                         }
                     },
-                    onNavigateToEditOfflineSubmission = { formId, submissionId, blockCode, gpName ->
+                    onNavigateToEditOfflineSubmission = { formId, submissionId, blockCode, gpName, radius ->
                         val encodedGpName = URLEncoder.encode(gpName ?: "", "UTF-8")
                         navController.navigate(
-                            Screen.FormDataCollection.createRoute(formId, blockCode, encodedGpName, submissionId)
+                            Screen.FormDataCollection.createRoute(formId, blockCode, encodedGpName, radius, submissionId)
                         ) {
                             launchSingleTop = true
                         }
@@ -281,6 +281,10 @@ fun AppNavigation() {
                         nullable = true
                         defaultValue = null
                     },
+                    navArgument("surveyRadius") {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    },
                     navArgument("submissionId") {
                         type = NavType.IntType
                         defaultValue = -1
@@ -290,6 +294,7 @@ fun AppNavigation() {
                 val formId = backStackEntry.arguments?.getInt("formId") ?: 0
                 val blockCode = backStackEntry.arguments?.getString("blockCode")
                 val gpNameEncoded = backStackEntry.arguments?.getString("gpName")
+                val radius = backStackEntry.arguments?.getInt("surveyRadius")
                 val gpName = URLDecoder.decode(gpNameEncoded ?: "", "UTF-8")
                 val submissionIdArg = backStackEntry.arguments?.getInt("submissionId") ?: -1
                 val submissionId = if (submissionIdArg != -1) submissionIdArg else null
@@ -311,18 +316,20 @@ fun AppNavigation() {
                         preferences,
                         gpName,
                         dgpsManager,
-                        submissionId
+                        submissionId,
+                        radius
                     )
                 )
                 FormDataCollectionScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
-                    onNavigateToMap = { type, fieldId, initialValue ->
+                    onNavigateToMap = { type, fieldId, initialValue, radius ->
                         navController.navigate(
                             Screen.FormMap.createRoute(
                                 type,
                                 fieldId,
-                                initialValue
+                                initialValue,
+                                radius
                             )
                         )
                     },
@@ -377,11 +384,11 @@ fun AppNavigation() {
                     onBack = {
                         navController.popBackStack()
                     },
-                    onMarkerClick = { fId, bCode,gpName ->
+                    onMarkerClick = { fId, bCode, gpName, surveyRadius ->
                         val encodedGpName = URLEncoder.encode(gpName ?: "", "UTF-8")
 
                         navController.navigate(
-                            Screen.FormDataCollection.createRoute(fId, bCode, encodedGpName)
+                            Screen.FormDataCollection.createRoute(fId, bCode, encodedGpName,surveyRadius)
                         )
                     }
                 )
@@ -392,12 +399,14 @@ fun AppNavigation() {
                 arguments = listOf(
                     navArgument("type") { type = NavType.StringType },
                     navArgument("fieldId") { type = NavType.StringType },
-                    navArgument("initialValue") { type = NavType.StringType }
+                    navArgument("initialValue") { type = NavType.StringType },
+                    navArgument("radius") { type = NavType.IntType }
                 )
             ) { backStackEntry ->
                 val type = backStackEntry.arguments?.getString("type") ?: "Point"
                 val fieldId = backStackEntry.arguments?.getString("fieldId") ?: ""
                 val initialValue = URLDecoder.decode(backStackEntry.arguments?.getString("initialValue") ?: "", "UTF-8")
+                val radius = backStackEntry.arguments?.getInt("radius")
 
                 FieldMapScreen(
                     type = type,
@@ -405,9 +414,13 @@ fun AppNavigation() {
                     initialValue = initialValue,
                     onBack = { navController.popBackStack() },
                     onSave = { resultFieldId, resultValue ->
-                        navController.previousBackStackEntry?.savedStateHandle?.set("map_result", Pair(resultFieldId, resultValue))
+                        navController.previousBackStackEntry?.savedStateHandle?.set(
+                            "map_result",
+                            Pair(resultFieldId, resultValue)
+                        )
                         navController.popBackStack()
-                    }
+                    },
+                    radius = radius
                 )
             }
         }
