@@ -66,6 +66,9 @@ interface CachedFormDetailDao {
 
     @Query("SELECT * FROM cached_form_details WHERE formId = :formId AND blockCode = :blockCode")
     suspend fun getFormDetail(formId: Int, blockCode: String): CachedFormDetail?
+
+    @Query("SELECT blockCode FROM cached_form_details WHERE formId = :formId")
+    suspend fun getDownloadedBlockCodes(formId: Int): List<String>
 }
 
 @Dao

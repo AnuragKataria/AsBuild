@@ -1,5 +1,6 @@
 package com.rbt.survey.ui.home
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,6 +14,7 @@ import com.rbt.survey.data.model.SubmissionItem
 import com.rbt.survey.data.model.SubmissionSearchRequest
 import com.rbt.survey.data.local.db.OfflineSubmission
 import com.rbt.survey.data.repository.GeoRepository
+import com.rbt.survey.data.utils.isInternetAvailable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -82,6 +84,16 @@ class HomeViewModel(
 
     private val _selectedOfflineIds = MutableStateFlow<Set<Int>>(emptySet())
     val selectedOfflineIds: StateFlow<Set<Int>> = _selectedOfflineIds
+
+    private val _downloadStates = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
+    val downloadStates: StateFlow<Map<String, DownloadState>> = _downloadStates
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message
+
+    fun clearMessage() {
+        _message.value = null
+    }
 
     fun toggleSelection(id: Int) {
         val current = _selectedOfflineIds.value.toMutableSet()
@@ -251,12 +263,35 @@ class HomeViewModel(
                 val userIdStr = preferences.userId.first() ?: return@launch
                 val response = geoRepository.getBlockSummary(userIdStr, formId)
                 if (response.isSuccessful && response.body()?.success == true) {
-                    _blockSummaries.value = response.body()?.data ?: emptyList()
+
+                    val blocks = response.body()?.data ?: emptyList()
+                    _blockSummaries.value = blocks
+
+                    // ✅ GET ALL DOWNLOADED BLOCKS IN ONE GO
+                    val downloadedCodes = repository.getDownloadedBlockCodes(formId)
+
+                    // ✅ MAP EACH BLOCK TO DOWNLOAD STATE
+                    val stateMap = blocks.associate { block ->
+
+                        val blockCode = block.blockCode ?: ""   // safety
+
+                        val isDownloaded = downloadedCodes.contains(blockCode)
+
+                        blockCode to DownloadState(
+                            isDownloading = false,
+                            isDownloaded = isDownloaded
+                        )
+                    }
+
+                    _downloadStates.value = stateMap
+
                 } else {
                     _blockSummaries.value = emptyList()
+                    _downloadStates.value = emptyMap()
                 }
             } catch (e: Exception) {
                 _blockSummaries.value = emptyList()
+                _downloadStates.value = emptyMap()
             } finally {
                 _blockSummaryLoading.value = false
             }
@@ -273,8 +308,22 @@ class HomeViewModel(
         }
     }
 
-    fun downloadBlockData(formId: Int, blockCode: String) {
+    fun downloadBlockData(context: Context,formId: Int, blockCode: String) {
         viewModelScope.launch {
+
+            // ❌ OFFLINE CHECK
+            if (!isInternetAvailable(context)) {
+                _message.value = "You are offline. Data cannot be downloaded"
+                return@launch
+            }
+
+            _downloadStates.value = _downloadStates.value.toMutableMap().apply {
+                this[blockCode] = DownloadState(
+                    isDownloading = true,
+                    isDownloaded = false
+                )
+            }
+
             try {
 
                 val userId = preferences.userId.first() ?: return@launch
@@ -287,8 +336,26 @@ class HomeViewModel(
                 // Done
                 Log.d("DOWNLOAD", "Block downloaded successfully")
 
+                // ✅ SUCCESS MESSAGE (for BOTH cases)
+                _message.value = "Download successful"
+
+                _downloadStates.value = _downloadStates.value.toMutableMap().apply {
+                    this[blockCode] = DownloadState(
+                        isDownloading = false,
+                        isDownloaded = true
+                    )
+                }
+
             } catch (e: Exception) {
                 Log.e("DOWNLOAD", "Failed", e)
+                _message.value = "Download failed"
+
+                _downloadStates.value = _downloadStates.value.toMutableMap().apply {
+                    this[blockCode] = DownloadState(
+                        isDownloading = false,
+                        isDownloaded = false
+                    )
+                }
             }
         }
     }
@@ -385,3 +452,8 @@ class HomeViewModel(
         }
     }
 }
+
+data class DownloadState(
+    val isDownloading: Boolean = false,
+    val isDownloaded: Boolean = false
+)

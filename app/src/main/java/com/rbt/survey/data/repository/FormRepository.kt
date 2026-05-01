@@ -131,6 +131,10 @@ class FormRepository(
         }
     }
 
+    suspend fun getDownloadedBlockCodes(formId: Int): List<String> {
+        return cachedFormDetailDao.getDownloadedBlockCodes(formId)
+    }
+
     suspend fun saveDraft(formId: Int, fieldId: String, gp: String, value: String) {
         draftDao.saveDraft(FormDraft(formId, fieldId,gp, value))
     }

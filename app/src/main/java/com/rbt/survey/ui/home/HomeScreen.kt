@@ -1,6 +1,7 @@
 package com.rbt.survey.ui.home
 
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,6 +36,7 @@ import java.util.Date
 import java.util.Locale
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.material3.TriStateCheckbox
+import androidx.compose.ui.platform.LocalContext
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,13 +55,30 @@ fun HomeScreen(
     var showMenu by remember { mutableStateOf(false) }
     val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
 
-//    var selectedForm by remember { mutableStateOf<FormData?>(null) }
     val selectedForm by viewModel.selectedForm.collectAsState()
-//    var expandedFormMenu by remember { mutableStateOf(false) }
-    var expandedAssignedMenu by remember { mutableStateOf(false) }
-    var expandedUploadedMenu by remember { mutableStateOf(false) }
     var itemToDelete by remember { mutableStateOf<OfflineSubmission?>(null) }
-    val selectedIds by viewModel.selectedOfflineIds.collectAsState()
+    val downloadStates by viewModel.downloadStates.collectAsState()
+
+    val context = LocalContext.current
+    val message by viewModel.message.collectAsState()
+
+    LaunchedEffect(message) {
+        message?.let {
+            Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.clearMessage()
+        }
+    }
+
+    LaunchedEffect(selectedForm, selectedTabIndex) {
+        selectedForm?.let { form ->
+            when (selectedTabIndex) {
+                0 -> viewModel.fetchBlockSummary(form.formId)
+                1 -> viewModel.fetchCompletedBlockSummary(form.formId)
+                2 -> viewModel.fetchOfflineSubmissions(form.formId)
+                3 -> viewModel.fetchUploadedSubmissions(form.formId)
+            }
+        }
+    }
 
     val tabs = listOf("Assigned", "Completed", "Submitted", "Uploaded")
 
@@ -255,8 +274,11 @@ fun HomeScreen(
                                     verticalArrangement = Arrangement.spacedBy(16.dp)
                                 ) {
                                     items(filteredBlocks) { summary ->
+                                        val state = downloadStates[summary.blockCode]
+                                        val context = LocalContext.current
                                         BlockSummaryCard(
                                             summary = summary,
+                                            downloadState = state,
                                             onClick = { blockCode ->
                                                 viewModel.setSelectedGpStatusList(summary.gpList)
                                                 viewModel.setSelectedSurveyRadius(summary.surveyRadius)
@@ -267,6 +289,7 @@ fun HomeScreen(
                                             onDownloadClick = { blockCode ->
                                                 selectedForm?.let { form ->
                                                     viewModel.downloadBlockData(
+                                                        context = context,
                                                         formId = form.formId,
                                                         blockCode = blockCode
                                                     )
@@ -316,8 +339,11 @@ fun HomeScreen(
                                         verticalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
                                         items(completedBlocks) { summary ->
+                                            val state = downloadStates[summary.blockCode]
+                                            val context = LocalContext.current
                                             BlockSummaryCard(
                                                 summary = summary,
+                                                downloadState = state,
                                                 onClick = { blockCode ->
                                                     viewModel.setSelectedGpStatusList(summary.gpList)
                                                     selectedForm?.let {
@@ -327,6 +353,7 @@ fun HomeScreen(
                                                 onDownloadClick = { blockCode ->
                                                     selectedForm?.let { form ->
                                                         viewModel.downloadBlockData(
+                                                            context = context,
                                                             formId = form.formId,
                                                             blockCode = blockCode
                                                         )
@@ -852,6 +879,7 @@ fun InfoChip(label: String, value: String) {
 @Composable
 fun BlockSummaryCard(
     summary: BlockSummary,
+    downloadState: DownloadState?,
     onClick: (String) -> Unit,
     onDownloadClick: (String) -> Unit
 ) {
@@ -891,12 +919,32 @@ fun BlockSummaryCard(
                 IconButton(
                     onClick = {
                         onDownloadClick(summary.blockCode)
-                    }
+                    },
+                    enabled = downloadState?.isDownloading != true
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "Download"
-                    )
+                    when {
+                        downloadState?.isDownloading == true -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+
+                        downloadState?.isDownloaded == true -> {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Downloaded",
+                                tint = androidx.compose.ui.graphics.Color(0xFF2E7D32) // green
+                            )
+                        }
+
+                        else -> {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Download"
+                            )
+                        }
+                    }
                 }
             }
 
