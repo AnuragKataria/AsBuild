@@ -32,6 +32,7 @@ class UserPreferences(private val context: Context) {
     val refreshToken: Flow<String?> = context.dataStore.data.map { it[REFRESH_TOKEN] }
     val userName: Flow<String?> = context.dataStore.data.map { it[USER_NAME] }
     val userId: Flow<String?> = context.dataStore.data.map { it[USER_ID] }
+    val userEmail: Flow<String?> = context.dataStore.data.map { it[USER_EMAIL] }
     val dgpsDeviceAddress: Flow<String?> = context.dataStore.data.map { it[DGPS_DEVICE_ADDRESS] }
     val corsHost: Flow<String?> = context.dataStore.data.map { it[CORS_HOST] }
     val corsPort: Flow<String?> = context.dataStore.data.map { it[CORS_PORT] }

@@ -2,6 +2,7 @@ package com.rbt.survey.data.remote
 
 import com.rbt.survey.data.model.BlockAssignmentResponse
 import com.rbt.survey.data.model.BlockSummaryResponse
+import com.rbt.survey.data.model.LocationRequest
 import com.rbt.survey.data.model.SubmissionResponse
 import com.rbt.survey.data.model.SubmissionSearchRequest
 import retrofit2.Response
@@ -28,5 +29,10 @@ interface GeoApi {
         @Path("formId") formId: Int,
         @Body request: SubmissionSearchRequest
     ): Response<SubmissionResponse>
+
+    @POST("v1/locations")
+    suspend fun sendLocation(
+        @Body request: LocationRequest
+    ): Response<Unit>
 }
 

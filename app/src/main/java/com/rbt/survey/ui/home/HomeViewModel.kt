@@ -1,6 +1,7 @@
 package com.rbt.survey.ui.home
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,6 +16,7 @@ import com.rbt.survey.data.model.SubmissionSearchRequest
 import com.rbt.survey.data.local.db.OfflineSubmission
 import com.rbt.survey.data.repository.GeoRepository
 import com.rbt.survey.data.utils.isInternetAvailable
+import com.rbt.survey.location.LocationService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -302,9 +304,13 @@ class HomeViewModel(
         _selectedBlockCode.value = blockCode
     }
 
-    fun logout() {
+    fun logout(context: Context) {
         viewModelScope.launch {
             preferences.clearAuthData()
+
+            // 🔥 STOP SERVICE
+            val intent = Intent(context, LocationService::class.java)
+            context.stopService(intent)
         }
     }
 

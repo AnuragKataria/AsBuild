@@ -110,7 +110,7 @@ fun HomeScreen(
                                 text = { Text("Logout") },
                                 onClick = {
                                     showMenu = false
-                                    viewModel.logout()
+                                    viewModel.logout(context)
                                     onLogout()
                                 },
                                 leadingIcon = {

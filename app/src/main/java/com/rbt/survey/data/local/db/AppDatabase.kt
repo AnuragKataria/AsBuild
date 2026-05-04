@@ -38,6 +38,41 @@ data class PendingFileUpload(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "location_queue")
+data class LocationEntity(
+
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+
+    val userId: Int,
+    val userName: String,
+    val email: String,
+
+    val lat: Double,
+    val lng: Double,
+
+    val accuracy: Double?,
+    val altitude: Double?,
+    val speed: Double?,
+    val heading: Double?,
+
+    val deviceType: String,
+    val recordedAt: String
+)
+
+@Dao
+interface LocationDao {
+
+    @Insert
+    suspend fun insert(location: LocationEntity)
+
+    @Query("SELECT * FROM location_queue ORDER BY id ASC")
+    suspend fun getAllLocations(): List<LocationEntity>
+
+    @Delete
+    suspend fun delete(location: LocationEntity)
+}
+
 @Dao
 interface FormDraftDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -142,9 +177,10 @@ interface CachedUploadedSubmissionDao {
         PendingFileUpload::class,
         CachedBlockAssignment::class,
         CachedBlockSummary::class,
-        CachedUploadedSubmission::class
+        CachedUploadedSubmission::class,
+        LocationEntity::class
     ],
-    version = 6
+    version = 7
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun formDraftDao(): FormDraftDao
@@ -155,6 +191,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedBlockAssignmentDao(): CachedBlockAssignmentDao
     abstract fun cachedBlockSummaryDao(): CachedBlockSummaryDao
     abstract fun cachedUploadedSubmissionDao(): CachedUploadedSubmissionDao
+    abstract fun locationDao(): LocationDao
 
     companion object {
         @Volatile
@@ -212,6 +249,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+
+                database.execSQL(
+                    """
+            CREATE TABLE IF NOT EXISTS `location_queue` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `userId` INTEGER NOT NULL,
+                `userName` TEXT NOT NULL,
+                `email` TEXT NOT NULL,
+                `lat` REAL NOT NULL,
+                `lng` REAL NOT NULL,
+                `accuracy` REAL,
+                `altitude` REAL,
+                `speed` REAL,
+                `heading` REAL,
+                `deviceType` TEXT NOT NULL,
+                `recordedAt` TEXT NOT NULL
+            )
+            """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: android.content.Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -219,7 +280,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "survey_database"
                 )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,MIGRATION_6_7)
                 .build()
                 INSTANCE = instance
                 instance

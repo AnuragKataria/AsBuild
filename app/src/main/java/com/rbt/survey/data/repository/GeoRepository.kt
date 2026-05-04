@@ -14,12 +14,16 @@ import com.rbt.survey.data.local.db.CachedBlockSummary
 import com.rbt.survey.data.local.db.CachedBlockSummaryDao
 import com.rbt.survey.data.local.db.CachedUploadedSubmission
 import com.rbt.survey.data.local.db.CachedUploadedSubmissionDao
+import com.rbt.survey.data.local.db.LocationDao
+import com.rbt.survey.data.local.db.LocationEntity
+import com.rbt.survey.data.model.LocationRequest
 
 class GeoRepository(
     private val geoApi: GeoApi,
     private val cachedBlockAssignmentDao: CachedBlockAssignmentDao,
     private val cachedBlockSummaryDao: CachedBlockSummaryDao,
-    private val cachedUploadedSubmissionDao: CachedUploadedSubmissionDao
+    private val cachedUploadedSubmissionDao: CachedUploadedSubmissionDao,
+    private val locationDao: LocationDao
 ) {
     private val gson = Gson()
 
@@ -91,5 +95,44 @@ class GeoRepository(
         }
     }
 
+    suspend fun sendLocation(request: LocationRequest): Boolean {
+        return try {
+            geoApi.sendLocation(request).isSuccessful
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // 🔴 Save offline
+    suspend fun saveLocationOffline(location: LocationEntity) {
+        locationDao.insert(location)
+    }
+
+    // 📦 Get all pending
+    suspend fun getPendingLocations(): List<LocationEntity> {
+        return locationDao.getAllLocations()
+    }
+
+    // 🗑 Delete after attempt
+    suspend fun deleteLocation(location: LocationEntity) {
+        locationDao.delete(location)
+    }
+
+}
+
+fun LocationEntity.toRequest(): LocationRequest {
+    return LocationRequest(
+        userId = userId,
+        userName = userName,
+        email = email,
+        lat = lat,
+        lng = lng,
+        accuracy = accuracy,
+        altitude = altitude,
+        speed = speed,
+        heading = heading,
+        deviceType = deviceType,
+        recordedAt = recordedAt
+    )
 }
 

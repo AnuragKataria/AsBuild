@@ -1,5 +1,6 @@
 package com.rbt.survey.ui.login
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,12 +16,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.rbt.survey.location.LocationService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,9 +37,17 @@ fun LoginScreen(
     var isPasswordVisible by remember { mutableStateOf(false) }
     
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(uiState) {
         if (uiState is LoginUiState.Success) {
+
+
+
+            // 🔥 START SERVICE HERE
+            val intent = Intent(context, LocationService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+
             onLoginSuccess()
             viewModel.resetState()
         }

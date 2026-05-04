@@ -1,5 +1,6 @@
 package com.rbt.survey.ui.navigation
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,6 +49,7 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 
 import androidx.work.*
+import com.rbt.survey.location.LocationService
 import com.rbt.survey.worker.SyncWorker
 import java.util.concurrent.TimeUnit
 
@@ -81,6 +83,19 @@ fun AppNavigation() {
     val preferences = UserPreferences(context)
     val dgpsManager = remember { DgpsManager(context) }
     val isLoggedInState by preferences.authToken.collectAsState(initial = "LOADING")
+
+    LaunchedEffect(isLoggedInState) {
+        if (isLoggedInState != null && isLoggedInState != "LOADING") {
+
+            val intent = Intent(context, LocationService::class.java)
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+    }
 
     // Setup Background Sync
     LaunchedEffect(Unit) {
@@ -189,7 +204,8 @@ fun AppNavigation() {
                         geoApi,
                         database.cachedBlockAssignmentDao(),
                         database.cachedBlockSummaryDao(),
-                        database.cachedUploadedSubmissionDao()
+                        database.cachedUploadedSubmissionDao(),
+                        database.locationDao()
                     )
                 }
                 val parentEntry = remember {
