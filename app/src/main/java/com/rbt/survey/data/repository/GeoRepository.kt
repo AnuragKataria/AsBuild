@@ -120,7 +120,7 @@ class GeoRepository(
 
 }
 
-fun LocationEntity.toRequest(): LocationRequest {
+fun LocationEntity.toRequest(includeRecordedAt: Boolean = true): LocationRequest {
     return LocationRequest(
         userId = userId,
         userName = userName,
@@ -132,7 +132,7 @@ fun LocationEntity.toRequest(): LocationRequest {
         speed = speed,
         heading = heading,
         deviceType = deviceType,
-        recordedAt = recordedAt
+        recordedAt = if (includeRecordedAt) recordedAt else null
     )
 }
 

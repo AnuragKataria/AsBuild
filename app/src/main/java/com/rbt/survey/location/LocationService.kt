@@ -84,11 +84,12 @@ class LocationService : Service() {
                 }
 
                 delay(60000) // every 60 seconds
+//                delay(15000) // every 15 seconds
             }
         }
     }
 
-    // 📍 Get Location
+    //  Get Location
     private suspend fun getCurrentLocation(): Location? {
 
         // ✅ Permission check
@@ -145,13 +146,13 @@ class LocationService : Service() {
                     speed = location.speed.toDouble(),
                     heading = location.bearing.toDouble(),
                     deviceType = "Android",
-                    recordedAt = Instant . now ().toString()
+                    recordedAt = Instant.now().toString()
                 )
 
-                if (isInternetAvailable(this as Context)) {
+                if (isInternetAvailable(applicationContext)) {
 
                     // 🟢 Send current location (same as before)
-                    val success = geoRepository.sendLocation(request.toRequest())
+                    val success = geoRepository.sendLocation(request.toRequest(includeRecordedAt = false))
 
                     if (success) {
                         Log.d("LocationService", "Location sent successfully")
@@ -191,7 +192,7 @@ class LocationService : Service() {
         for (item in pendingList) {
 
             try {
-                geoRepository.sendLocation(item.toRequest())
+                geoRepository.sendLocation(item.toRequest(includeRecordedAt = true))
             } catch (e: Exception) {
                 // ignore error
             }

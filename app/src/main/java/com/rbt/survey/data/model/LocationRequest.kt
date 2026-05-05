@@ -11,5 +11,5 @@ data class LocationRequest(
     val speed: Double? = null,
     val heading: Double? = null,
     val deviceType: String? = null,
-    val recordedAt: String
+    val recordedAt: String?
 )
