@@ -1,4 +1,4 @@
-package com.rbt.survey.ui.home
+package com.rbt.survey.ui.surveyDashboard
 
 import android.content.Context
 import android.content.Intent
@@ -31,7 +31,7 @@ sealed class HomeUiState {
     data class Error(val message: String) : HomeUiState()
 }
 
-class HomeViewModel(
+class SurveyDashboardViewModel(
     private val repository: FormRepository,
     private val geoRepository: GeoRepository,
     private val preferences: UserPreferences

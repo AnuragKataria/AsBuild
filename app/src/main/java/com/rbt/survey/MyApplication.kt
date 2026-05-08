@@ -16,7 +16,7 @@ class MyApplication : Application() {
         val prefs = UserPreferences(this)
 
         CoroutineScope(Dispatchers.IO).launch {
-            val token = prefs.refreshToken.first()
+            val token = prefs.authToken.first()
 
             // ✅ If already logged in → start service
             if (!token.isNullOrEmpty()) {

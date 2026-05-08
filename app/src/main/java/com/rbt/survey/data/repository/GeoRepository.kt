@@ -16,7 +16,9 @@ import com.rbt.survey.data.local.db.CachedUploadedSubmission
 import com.rbt.survey.data.local.db.CachedUploadedSubmissionDao
 import com.rbt.survey.data.local.db.LocationDao
 import com.rbt.survey.data.local.db.LocationEntity
+import com.rbt.survey.data.model.LatestLocationResponse
 import com.rbt.survey.data.model.LocationRequest
+import com.rbt.survey.data.model.UserLocationResponse
 
 class GeoRepository(
     private val geoApi: GeoApi,
@@ -101,6 +103,28 @@ class GeoRepository(
         } catch (e: Exception) {
             false
         }
+    }
+
+    suspend fun getAllUsersLocations(): Response<UserLocationResponse> {
+        return geoApi.getAllUsersLocations()
+    }
+
+    suspend fun getLatestUserLocation(
+        userId: Int
+    ): Response<LatestLocationResponse> {
+        return geoApi.getLatestUserLocation(userId)
+    }
+
+    suspend fun getUserLocationHistory(
+        userId: Int,
+        from: String,
+        to: String
+    ): Response<UserLocationResponse> {
+        return geoApi.getUserLocationHistory(
+            userId = userId,
+            from = from,
+            to = to
+        )
     }
 
     // 🔴 Save offline

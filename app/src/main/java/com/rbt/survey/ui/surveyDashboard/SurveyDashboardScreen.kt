@@ -1,6 +1,5 @@
-package com.rbt.survey.ui.home
+package com.rbt.survey.ui.surveyDashboard
 
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,17 +16,11 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import com.rbt.survey.data.model.FormData
 import com.rbt.survey.data.model.BlockSummary
 import com.rbt.survey.data.model.GpItem
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.*
 import androidx.compose.ui.text.font.FontWeight
-import com.rbt.survey.data.model.Assignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import com.rbt.survey.data.model.SubmissionItem
 import com.rbt.survey.data.local.db.OfflineSubmission
@@ -41,8 +34,8 @@ import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    viewModel: HomeViewModel,
+fun SurveyDashboardScreen(
+    viewModel: SurveyDashboardViewModel,
     onNavigateToMap: (Int, String?) -> Unit,
     onNavigateToEditOfflineSubmission: (Int, Int, String?, String?, Int?) -> Unit,
     onLogout: () -> Unit,

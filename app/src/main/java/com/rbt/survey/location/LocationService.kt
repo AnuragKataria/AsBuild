@@ -57,7 +57,7 @@ class LocationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -84,7 +84,7 @@ class LocationService : Service() {
                 }
 
                 delay(60000) // every 60 seconds
-//                delay(15000) // every 15 seconds
+//                delay(300000) // every 60 seconds
             }
         }
     }
@@ -92,7 +92,7 @@ class LocationService : Service() {
     //  Get Location
     private suspend fun getCurrentLocation(): Location? {
 
-        // ✅ Permission check
+        // Permission check
         val hasPermission = ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -219,5 +219,12 @@ class LocationService : Service() {
             .setContentText("Your location is being tracked")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .build()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf() // STOP when app removed
     }
 }

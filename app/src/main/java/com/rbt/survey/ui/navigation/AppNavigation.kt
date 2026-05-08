@@ -1,6 +1,7 @@
 package com.rbt.survey.ui.navigation
 
 import android.content.Intent
+import android.os.Build
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,9 +30,9 @@ import com.rbt.survey.data.repository.GeoRepository
 import com.rbt.survey.ui.form.FormDataCollectionScreen
 import com.rbt.survey.ui.form.FormDataCollectionViewModel
 import com.rbt.survey.ui.form.FormDataCollectionViewModelFactory
-import com.rbt.survey.ui.home.HomeScreen
-import com.rbt.survey.ui.home.HomeViewModel
-import com.rbt.survey.ui.home.HomeViewModelFactory
+import com.rbt.survey.ui.surveyDashboard.SurveyDashboardScreen
+import com.rbt.survey.ui.surveyDashboard.SurveyDashboardViewModel
+import com.rbt.survey.ui.surveyDashboard.SurveyDashboardViewModelFactory
 import com.rbt.survey.ui.login.LoginScreen
 import com.rbt.survey.ui.login.LoginViewModel
 import com.rbt.survey.ui.login.LoginViewModelFactory
@@ -50,13 +51,23 @@ import java.net.URLEncoder
 
 import androidx.work.*
 import com.rbt.survey.location.LocationService
+import com.rbt.survey.ui.dashboard.DashboardScreen
+import com.rbt.survey.ui.locationTrackingDashboard.LocationTrackingScreen
+import com.rbt.survey.ui.locationTrackingDashboard.LocationTrackingViewModel
+import com.rbt.survey.ui.locationTrackingDashboard.LocationTrackingViewModelFactory
 import com.rbt.survey.worker.SyncWorker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Login : Screen("login")
-    object Home : Screen("home")
+    object SurveyDashboard  : Screen("survey_dashboard")
+    object Dashboard : Screen("dashboard")
+
+    object LocationTracking : Screen("location_tracking")
     object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}&surveyRadius={surveyRadius}&submissionId={submissionId}") {
         fun createRoute(formId: Int, blockCode: String?, gpName: String?,surveyRadius: Int?, submissionId: Int? = null) = "form_data/$formId?blockCode=${blockCode ?: ""}&gpName=${gpName ?: ""}&surveyRadius=${surveyRadius ?: -1}&submissionId=${submissionId ?: -1}"
     }
@@ -89,7 +100,7 @@ fun AppNavigation() {
 
             val intent = Intent(context, LocationService::class.java)
 
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
                 context.startService(intent)
@@ -159,7 +170,7 @@ fun AppNavigation() {
                         }
                     },
                     onNavigateToHome = {
-                        navController.navigate(Screen.Home.route) {
+                        navController.navigate(Screen.Dashboard.route) {
                             popUpTo(Screen.Splash.route) { inclusive = true }
                         }
                     }
@@ -174,14 +185,46 @@ fun AppNavigation() {
                 LoginScreen(
                     viewModel = viewModel,
                     onLoginSuccess = {
-                        navController.navigate(Screen.Home.route) {
+                        navController.navigate(Screen.Dashboard.route) {
                             popUpTo(Screen.Login.route) { inclusive = true }
                         }
                     }
                 )
             }
 
-            composable(Screen.Home.route) {
+            composable(Screen.Dashboard.route) {
+                DashboardScreen(
+                    onInventoryClick = {
+                        // TODO: navigate when ready
+                    },
+                    onSurveyClick = {
+                        navController.navigate(Screen.SurveyDashboard.route)
+                    },
+                    onLocationTrackingClick = {
+                        navController.navigate(Screen.LocationTracking.route)
+                    },
+                    onLogout = {
+                        CoroutineScope(Dispatchers.Main).launch {
+                            // clear auth
+                            preferences.clearAuthData()
+
+                            // stop service
+                            val intent = Intent(context, LocationService::class.java)
+                            context.stopService(intent)
+
+                            // navigate
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        }
+                    },
+                    onNavigateToDgpsSettings = {
+                        navController.navigate(Screen.DgpsSettings.route)
+                    }
+                )
+            }
+
+            composable(Screen.SurveyDashboard.route) {
                 val database = AppDatabase.getDatabase(context)
                 val authApi = remember {
                     RetrofitClient.getAuthenticatedApi(context, preferences)
@@ -209,14 +252,14 @@ fun AppNavigation() {
                     )
                 }
                 val parentEntry = remember {
-                    navController.getBackStackEntry(Screen.Home.route)
+                    navController.getBackStackEntry(Screen.SurveyDashboard.route)
                 }
 
-                val viewModel: HomeViewModel = viewModel(
+                val viewModel: SurveyDashboardViewModel = viewModel(
                     parentEntry,
-                    factory = HomeViewModelFactory(repository, geoRepository, preferences)
+                    factory = SurveyDashboardViewModelFactory(repository, geoRepository, preferences)
                 )
-                HomeScreen(
+                SurveyDashboardScreen(
                     viewModel = viewModel,
 
                     onNavigateToMap = { formId, blockCode ->
@@ -243,6 +286,42 @@ fun AppNavigation() {
                     },
                     onNavigateToDgpsSettings = {
                         navController.navigate(Screen.DgpsSettings.route)
+                    }
+                )
+            }
+
+            composable(Screen.LocationTracking.route) {
+
+                val database = AppDatabase.getDatabase(context)
+
+                val geoApi = remember {
+                    RetrofitClient.getGeoApi(context, preferences)
+                }
+
+                val geoRepository = remember {
+
+                    GeoRepository(
+                        geoApi,
+                        database.cachedBlockAssignmentDao(),
+                        database.cachedBlockSummaryDao(),
+                        database.cachedUploadedSubmissionDao(),
+                        database.locationDao()
+                    )
+                }
+
+                val viewModel: LocationTrackingViewModel = viewModel(
+
+                    factory = LocationTrackingViewModelFactory(
+                        geoRepository
+                    )
+                )
+
+                LocationTrackingScreen(
+
+                    viewModel = viewModel,
+
+                    onBack = {
+                        navController.popBackStack()
                     }
                 )
             }
@@ -385,17 +464,17 @@ fun AppNavigation() {
                 )
 
                 val parentEntry = remember {
-                    navController.getBackStackEntry(Screen.Home.route)
+                    navController.getBackStackEntry(Screen.SurveyDashboard.route)
                 }
-                val homeViewModel: HomeViewModel = viewModel(parentEntry)
+                val surveyDashboardViewModel: SurveyDashboardViewModel = viewModel(parentEntry)
 
-                val surveyRadius by homeViewModel.selectedSurveyRadius.collectAsState()
+                val surveyRadius by surveyDashboardViewModel.selectedSurveyRadius.collectAsState()
 
                 GpMapScreen(
                     viewModel = viewModel,
                     formId = formId,
                     blockCode = blockCode,
-                    gpStatusList = homeViewModel.selectedGpStatusList.collectAsState().value,
+                    gpStatusList = surveyDashboardViewModel.selectedGpStatusList.collectAsState().value,
                     surveyRadius = surveyRadius,
                     onBack = {
                         navController.popBackStack()
