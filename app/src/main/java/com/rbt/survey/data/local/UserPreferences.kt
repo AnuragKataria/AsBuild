@@ -3,9 +3,11 @@ package com.rbt.survey.data.local
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -77,6 +79,30 @@ class UserPreferences(private val context: Context) {
             pass?.let { prefs[CORS_PASS] = it }
             prefs[USE_DGPS] = useDgps.toString()
             prefs[USE_CORS] = useCors.toString()
+        }
+    }
+
+    fun stringSettingFlow(key: String, defaultValue: String): Flow<String> =
+        context.dataStore.data.map { prefs -> prefs[stringPreferencesKey(key)] ?: defaultValue }
+
+    fun booleanSettingFlow(key: String, defaultValue: Boolean): Flow<Boolean> =
+        context.dataStore.data.map { prefs -> prefs[booleanPreferencesKey(key)] ?: defaultValue }
+
+    suspend fun getStringSetting(key: String, defaultValue: String): String =
+        context.dataStore.data.first()[stringPreferencesKey(key)] ?: defaultValue
+
+    suspend fun getBooleanSetting(key: String, defaultValue: Boolean): Boolean =
+        context.dataStore.data.first()[booleanPreferencesKey(key)] ?: defaultValue
+
+    suspend fun saveStringSetting(key: String, value: String) {
+        context.dataStore.edit { prefs ->
+            prefs[stringPreferencesKey(key)] = value
+        }
+    }
+
+    suspend fun saveBooleanSetting(key: String, value: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[booleanPreferencesKey(key)] = value
         }
     }
 }

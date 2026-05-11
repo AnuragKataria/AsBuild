@@ -40,11 +40,20 @@ import com.rbt.survey.ui.map.MapScreen as GpMapScreen
 import com.rbt.survey.ui.form.MapScreen as FieldMapScreen
 import com.rbt.survey.ui.map.MapViewModel
 import com.rbt.survey.ui.map.MapViewModelFactory
-import com.rbt.survey.ui.dgps.DgpsSettingsScreen
 import com.rbt.survey.ui.dgps.DgpsViewModel
 import com.rbt.survey.ui.dgps.DgpsViewModelFactory
-import com.rbt.survey.ui.dgps.SatelliteViewScreen
 import com.rbt.survey.ui.dgps.BluetoothDeviceListScreen
+import com.rbt.survey.ui.dgps.BaseModeSettingsScreen
+import com.rbt.survey.ui.dgps.DeviceInformationScreen
+import com.rbt.survey.ui.dgps.DeviceSettingsScreen
+import com.rbt.survey.ui.dgps.DgpsHomeScreen
+import com.rbt.survey.ui.dgps.GnssSystemScreen
+import com.rbt.survey.ui.dgps.InspectionAccuracyScreen
+import com.rbt.survey.ui.dgps.NmeaSettingsScreen
+import com.rbt.survey.ui.dgps.PoleCalibrationScreen
+import com.rbt.survey.ui.dgps.PositionInformationScreen
+import com.rbt.survey.ui.dgps.RoverModeSettingsScreen
+import com.rbt.survey.ui.dgps.StaticSurveySettingsScreen
 import com.rbt.survey.ui.splash.SplashScreen
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -82,6 +91,16 @@ sealed class Screen(val route: String) {
     }
 
     object DgpsSettings : Screen("dgps_settings")
+    object DgpsRover : Screen("dgps_rover")
+    object DgpsBase : Screen("dgps_base")
+    object DgpsStatic : Screen("dgps_static")
+    object DgpsInspection : Screen("dgps_inspection")
+    object DgpsPoleCalibration : Screen("dgps_pole_calibration")
+    object DgpsDeviceInformation : Screen("dgps_device_information")
+    object DgpsDeviceSettings : Screen("dgps_device_settings")
+    object DgpsNmeaSettings : Screen("dgps_nmea_settings")
+    object DgpsPositionInformation : Screen("dgps_position_information")
+    object DgpsGnssSystem : Screen("dgps_gnss_system")
     object SatelliteView : Screen("satellite_view")
     object BluetoothDeviceList : Screen("bluetooth_device_list")
 }
@@ -330,20 +349,28 @@ fun AppNavigation() {
                 val dgpsViewModel: DgpsViewModel = viewModel(
                     factory = DgpsViewModelFactory(preferences, dgpsManager)
                 )
-                DgpsSettingsScreen(
+                DgpsHomeScreen(
                     viewModel = dgpsViewModel,
                     onBack = { navController.popBackStack() },
-                    onNavigateToSatelliteView = {
-                        navController.navigate(Screen.SatelliteView.route)
-                    },
-                    onNavigateToBluetoothList = {
-                        navController.navigate(Screen.BluetoothDeviceList.route)
-                    }
+                    onCommunicationClick = { navController.navigate(Screen.BluetoothDeviceList.route) },
+                    onRoverClick = { navController.navigate(Screen.DgpsRover.route) },
+                    onBaseClick = { navController.navigate(Screen.DgpsBase.route) },
+                    onStaticClick = { navController.navigate(Screen.DgpsStatic.route) },
+                    onInspectionAccuracyClick = { navController.navigate(Screen.DgpsInspection.route) },
+                    onDeviceInformationClick = { navController.navigate(Screen.DgpsDeviceInformation.route) },
+                    onDeviceSettingsClick = { navController.navigate(Screen.DgpsDeviceSettings.route) },
+                    onNmeaSettingsClick = { navController.navigate(Screen.DgpsNmeaSettings.route) },
+                    onPositionInformationClick = { navController.navigate(Screen.DgpsPositionInformation.route) },
+                    onGnssSystemClick = { navController.navigate(Screen.DgpsGnssSystem.route) }
                 )
             }
 
             composable(Screen.BluetoothDeviceList.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
                 val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
                     factory = DgpsViewModelFactory(preferences, dgpsManager)
                 )
                 BluetoothDeviceListScreen(
@@ -352,13 +379,160 @@ fun AppNavigation() {
                 )
             }
 
-            composable(Screen.SatelliteView.route) {
+            composable(Screen.DgpsRover.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
                 val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
                     factory = DgpsViewModelFactory(preferences, dgpsManager)
                 )
-                SatelliteViewScreen(
+                RoverModeSettingsScreen(
                     viewModel = dgpsViewModel,
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.DgpsBase.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                BaseModeSettingsScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.DgpsStatic.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                StaticSurveySettingsScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.DgpsInspection.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                InspectionAccuracyScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() },
+                    onPoleCalibrationClick = { navController.navigate(Screen.DgpsPoleCalibration.route) }
+                )
+            }
+
+            composable(Screen.DgpsPoleCalibration.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                PoleCalibrationScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.DgpsDeviceInformation.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                DeviceInformationScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.DgpsDeviceSettings.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                DeviceSettingsScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.DgpsNmeaSettings.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                NmeaSettingsScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.DgpsPositionInformation.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                PositionInformationScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() },
+                    onSettingsClick = { navController.navigate(Screen.DgpsGnssSystem.route) }
+                )
+            }
+
+            composable(Screen.DgpsGnssSystem.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                GnssSystemScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.SatelliteView.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                PositionInformationScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() },
+                    onSettingsClick = { navController.navigate(Screen.DgpsGnssSystem.route) }
                 )
             }
 
