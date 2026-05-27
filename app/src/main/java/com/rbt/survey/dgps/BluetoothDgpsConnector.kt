@@ -19,6 +19,8 @@ class BluetoothDgpsConnector(private val context: Context) {
     val status = MutableStateFlow<DgpsStatus>(DgpsStatus.Idle)
     val location = MutableStateFlow<DgpsLocation?>(null)
     val rawNmea = kotlinx.coroutines.flow.MutableSharedFlow<String>()
+    val lastRawSentence = MutableStateFlow("")
+    val lastRawSentenceAt = MutableStateFlow<Long?>(null)
     
     private val nmeaParser = NmeaParser()
 
@@ -52,6 +54,8 @@ class BluetoothDgpsConnector(private val context: Context) {
                         lineBuffer.delete(0, newlineIndex + 1)
                         
                         if (line.isNotEmpty()) {
+                            lastRawSentence.value = line
+                            lastRawSentenceAt.value = System.currentTimeMillis()
                             rawNmea.tryEmit(line)
                             val loc = nmeaParser.parse(line)
                             if (loc != null) {
@@ -88,6 +92,8 @@ class BluetoothDgpsConnector(private val context: Context) {
             e.printStackTrace()
         }
         socket = null
+        lastRawSentence.value = ""
+        lastRawSentenceAt.value = null
         status.value = DgpsStatus.Idle
     }
 }

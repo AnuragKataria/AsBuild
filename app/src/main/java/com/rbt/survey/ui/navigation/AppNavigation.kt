@@ -45,6 +45,7 @@ import com.rbt.survey.ui.dgps.DgpsViewModelFactory
 import com.rbt.survey.ui.dgps.BluetoothDeviceListScreen
 import com.rbt.survey.ui.dgps.BaseModeSettingsScreen
 import com.rbt.survey.ui.dgps.DeviceInformationScreen
+import com.rbt.survey.ui.dgps.DeviceSelfCheckScreen
 import com.rbt.survey.ui.dgps.DeviceSettingsScreen
 import com.rbt.survey.ui.dgps.DgpsHomeScreen
 import com.rbt.survey.ui.dgps.GnssSystemScreen
@@ -101,6 +102,7 @@ sealed class Screen(val route: String) {
     object DgpsNmeaSettings : Screen("dgps_nmea_settings")
     object DgpsPositionInformation : Screen("dgps_position_information")
     object DgpsGnssSystem : Screen("dgps_gnss_system")
+    object DgpsSelfCheck : Screen("dgps_self_check")
     object SatelliteView : Screen("satellite_view")
     object BluetoothDeviceList : Screen("bluetooth_device_list")
 }
@@ -353,6 +355,7 @@ fun AppNavigation() {
                     viewModel = dgpsViewModel,
                     onBack = { navController.popBackStack() },
                     onCommunicationClick = { navController.navigate(Screen.BluetoothDeviceList.route) },
+                    onSelfCheckClick = { navController.navigate(Screen.DgpsSelfCheck.route) },
                     onRoverClick = { navController.navigate(Screen.DgpsRover.route) },
                     onBaseClick = { navController.navigate(Screen.DgpsBase.route) },
                     onStaticClick = { navController.navigate(Screen.DgpsStatic.route) },
@@ -376,6 +379,21 @@ fun AppNavigation() {
                 BluetoothDeviceListScreen(
                     viewModel = dgpsViewModel,
                     onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(Screen.DgpsSelfCheck.route) {
+                val parentEntry = remember {
+                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+                }
+                val dgpsViewModel: DgpsViewModel = viewModel(
+                    parentEntry,
+                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+                )
+                DeviceSelfCheckScreen(
+                    viewModel = dgpsViewModel,
+                    onBack = { navController.popBackStack() },
+                    onOpenCommunication = { navController.navigate(Screen.BluetoothDeviceList.route) }
                 )
             }
 

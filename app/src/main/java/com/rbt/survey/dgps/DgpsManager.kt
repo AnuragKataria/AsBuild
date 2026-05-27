@@ -16,6 +16,9 @@ class DgpsManager(context: Context) {
     val status = bluetoothConnector.status
     val location = bluetoothConnector.location
     val isNtripConnected = ntripClient.isConnected
+    val rawNmea = bluetoothConnector.rawNmea
+    val lastRawSentence = bluetoothConnector.lastRawSentence
+    val lastRawSentenceAt = bluetoothConnector.lastRawSentenceAt
 
     init {
         CoroutineScope(Dispatchers.IO).launch {

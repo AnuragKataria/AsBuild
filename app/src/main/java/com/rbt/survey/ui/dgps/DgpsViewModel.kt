@@ -104,6 +104,8 @@ class DgpsViewModel(
     val dgpsStatus = dgpsManager.status
     val dgpsLocation = dgpsManager.location
     val isNtripConnected = dgpsManager.isNtripConnected
+    val lastRawSentence = dgpsManager.lastRawSentence
+    val lastRawSentenceAt = dgpsManager.lastRawSentenceAt
 
     private val _uiSettings = MutableStateFlow(DgpsUiSettings())
     val uiSettings = _uiSettings.asStateFlow()

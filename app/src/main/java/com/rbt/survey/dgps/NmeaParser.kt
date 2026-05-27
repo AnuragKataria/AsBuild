@@ -2,10 +2,17 @@ package com.rbt.survey.dgps
 
 class NmeaParser {
     private var currentLocation = DgpsLocation(0.0, 0.0, 0.0, 0f, 0f, 0f, 0, 0)
-    private val satelliteMap = mutableMapOf<Int, SatelliteInfo>()
-    private val usedSatellites = mutableSetOf<Int>()
-    private var gsvTotalSentences = 0
-    private var gsvCurrentSentence = 0
+    private val satelliteMap = linkedMapOf<String, TimedSatelliteInfo>()
+    private val usedSatellites = mutableSetOf<String>()
+
+    private data class TimedSatelliteInfo(
+        val satellite: SatelliteInfo,
+        val lastSeenAt: Long
+    )
+
+    companion object {
+        private const val SATELLITE_STALE_MS = 15_000L
+    }
 
     fun parse(nmea: String): DgpsLocation? {
         if (!nmea.startsWith("$")) return null
@@ -17,6 +24,7 @@ class NmeaParser {
         
         when {
             sentenceType.endsWith("GGA") -> parseGGA(parts)
+            sentenceType.endsWith("GNS") -> parseGNS(parts)
             sentenceType.endsWith("GSA") -> parseGSA(parts)
             sentenceType.endsWith("GST") -> parseGST(parts)
             sentenceType.endsWith("GSV") -> parseGSV(parts)
@@ -41,8 +49,9 @@ class NmeaParser {
             val hdop = parts[8].toFloatOrNull() ?: 0f
             val altitude = parts[9].toDoubleOrNull() ?: 0.0
             val utcTime = parts.getOrNull(1).orEmpty()
-            val ageSeconds = parts.getOrNull(13)?.toFloatOrNull()
+            val ageSeconds = parts.getOrNull(13)?.toFloatOrNull()?.takeIf { it > 0f } ?: currentLocation.ageSeconds
             val baseStationId = parts.getOrNull(14)?.split("*")?.firstOrNull()?.takeIf { it.isNotBlank() }
+                ?: currentLocation.baseStationId
             
             if (latRaw.isEmpty() || lonRaw.isEmpty()) return
             
@@ -80,28 +89,89 @@ class NmeaParser {
         }
     }
 
-    private fun parseGSA(parts: List<String>) {
-        if (parts.size < 17) return
+    private fun parseGNS(parts: List<String>) {
+        if (parts.size < 10) return
 
         try {
-            usedSatellites.clear()
+            val latRaw = parts.getOrNull(2).orEmpty()
+            val latDir = parts.getOrNull(3).orEmpty()
+            val lonRaw = parts.getOrNull(4).orEmpty()
+            val lonDir = parts.getOrNull(5).orEmpty()
+            val mode = parts.getOrNull(6).orEmpty()
+            val satellites = parts.getOrNull(7)?.toIntOrNull() ?: currentLocation.satellites
+            val hdop = parts.getOrNull(8)?.toFloatOrNull() ?: currentLocation.hdop ?: 0f
+            val altitude = parts.getOrNull(9)?.toDoubleOrNull() ?: currentLocation.altitude
+            val ageSeconds = parts.getOrNull(11)?.toFloatOrNull()?.takeIf { it > 0f } ?: currentLocation.ageSeconds
+            val baseStationId = parts.getOrNull(12)?.split("*")?.firstOrNull()?.takeIf { it.isNotBlank() }
+                ?: currentLocation.baseStationId
+            val utcTime = parts.getOrNull(1).orEmpty()
+
+            if (latRaw.isEmpty() || lonRaw.isEmpty()) return
+
+            val lat = convertToDecimal(latRaw, latDir)
+            val lon = convertToDecimal(lonRaw, lonDir)
+            val fixQuality = modeToFixQuality(mode).coerceAtLeast(currentLocation.fixQuality)
+            val estimatedAccuracy = if (currentLocation.hrms > 0f) {
+                currentLocation.hrms
+            } else {
+                when (fixQuality) {
+                    4 -> 0.01f
+                    5 -> 0.15f
+                    2 -> 0.40f
+                    1 -> hdop * 3.0f
+                    else -> hdop * 5.0f
+                }
+            }
+
+            currentLocation = currentLocation.copy(
+                latitude = lat,
+                longitude = lon,
+                altitude = altitude,
+                accuracy = estimatedAccuracy,
+                fixQuality = fixQuality,
+                satellites = satellites,
+                hdop = hdop,
+                ageSeconds = ageSeconds,
+                utcDateTime = mergeDateTime(currentLocation.utcDateTime, utcTime = utcTime),
+                baseStationId = baseStationId,
+                timestamp = System.currentTimeMillis()
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun parseGSA(parts: List<String>) {
+        if (parts.size < 18) return
+
+        try {
+            val constellation = constellationFromGsa(parts)
+            usedSatellites.removeAll { it.startsWith("${constellation.name}:") }
             for (i in 3..14) {
-                parts.getOrNull(i)?.toIntOrNull()?.let { usedSatellites.add(it) }
+                parts.getOrNull(i)?.toIntOrNull()?.let { prn ->
+                    usedSatellites.add(satelliteKey(constellation, prn))
+                }
             }
 
             val pdop = parts.getOrNull(15)?.toFloatOrNull()
             val hdop = parts.getOrNull(16)?.toFloatOrNull()
             val vdop = parts.getOrNull(17)?.split("*")?.firstOrNull()?.toFloatOrNull()
 
-            satelliteMap.replaceAll { _, sat ->
-                sat.copy(usedInFix = sat.prn in usedSatellites)
+            satelliteMap.replaceAll { _, timedSat ->
+                timedSat.copy(
+                    satellite = timedSat.satellite.copy(
+                        usedInFix = usedSatellites.contains(
+                            satelliteKey(timedSat.satellite.constellation, timedSat.satellite.prn)
+                        )
+                    )
+                )
             }
 
             currentLocation = currentLocation.copy(
                 pdop = pdop,
                 hdop = hdop ?: currentLocation.hdop,
                 vdop = vdop,
-                satellitesList = satelliteMap.values.toList()
+                satellitesList = activeSatellites()
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -141,18 +211,7 @@ class NmeaParser {
         
         try {
             val constellation = constellationFromSentence(parts[0])
-            val totalSentences = parts[1].toIntOrNull() ?: 0
-            val sentenceNumber = parts[2].toIntOrNull() ?: 0
-            
-            if (sentenceNumber == 1) {
-                // Reset on first sentence of a sequence
-                if (gsvCurrentSentence == gsvTotalSentences) {
-                    satelliteMap.clear()
-                }
-            }
-            
-            gsvTotalSentences = totalSentences
-            gsvCurrentSentence = sentenceNumber
+            val now = System.currentTimeMillis()
             
             // Satellites start at index 4, group of 4 fields per satellite
             for (i in 4 until parts.size - 3 step 4) {
@@ -161,22 +220,26 @@ class NmeaParser {
                 val azimuth = parts[i+2].toIntOrNull() ?: 0
                 val snrPart = parts[i+3].split("*")[0]
                 val snr = snrPart.toIntOrNull() ?: 0
+                val resolvedConstellation = resolveConstellation(constellation, prn)
+                val key = satelliteKey(resolvedConstellation, prn)
                 
-                satelliteMap[prn] = SatelliteInfo(
-                    prn = prn,
-                    elevation = elevation,
-                    azimuth = azimuth,
-                    snr = snr,
-                    constellation = constellation,
-                    usedInFix = prn in usedSatellites
+                satelliteMap[key] = TimedSatelliteInfo(
+                    satellite = SatelliteInfo(
+                        prn = prn,
+                        elevation = elevation,
+                        azimuth = azimuth,
+                        snr = snr,
+                        constellation = resolvedConstellation,
+                        usedInFix = key in usedSatellites
+                    ),
+                    lastSeenAt = now
                 )
             }
-            
-            if (sentenceNumber == totalSentences) {
-                currentLocation = currentLocation.copy(
-                    satellitesList = satelliteMap.values.toList()
-                )
-            }
+
+            purgeStaleSatellites(now)
+            currentLocation = currentLocation.copy(
+                satellitesList = activeSatellites()
+            )
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -240,10 +303,72 @@ class NmeaParser {
             sentenceType.startsWith("\$GL") -> SatelliteConstellation.GLONASS
             sentenceType.startsWith("\$GA") -> SatelliteConstellation.GALILEO
             sentenceType.startsWith("\$GB") || sentenceType.startsWith("\$BD") -> SatelliteConstellation.BEIDOU
+            sentenceType.startsWith("\$GN") -> SatelliteConstellation.UNKNOWN
             sentenceType.startsWith("\$GQ") -> SatelliteConstellation.QZSS
             sentenceType.startsWith("\$GI") || sentenceType.startsWith("\$IR") -> SatelliteConstellation.IRNSS
             sentenceType.startsWith("\$SB") -> SatelliteConstellation.SBAS
             else -> SatelliteConstellation.UNKNOWN
+        }
+    }
+
+    private fun constellationFromGsa(parts: List<String>): SatelliteConstellation {
+        val systemId = parts.getOrNull(18)?.split("*")?.firstOrNull()?.toIntOrNull()
+        return when (systemId) {
+            1 -> SatelliteConstellation.GPS
+            2 -> SatelliteConstellation.GLONASS
+            3 -> SatelliteConstellation.GALILEO
+            4 -> SatelliteConstellation.BEIDOU
+            5 -> SatelliteConstellation.QZSS
+            6 -> SatelliteConstellation.IRNSS
+            else -> constellationFromSentence(parts.firstOrNull().orEmpty())
+        }
+    }
+
+    private fun resolveConstellation(
+        sentenceConstellation: SatelliteConstellation,
+        prn: Int
+    ): SatelliteConstellation {
+        if (sentenceConstellation != SatelliteConstellation.UNKNOWN) {
+            return sentenceConstellation
+        }
+        return when (prn) {
+            in 1..32 -> SatelliteConstellation.GPS
+            in 33..64 -> SatelliteConstellation.SBAS
+            in 65..96 -> SatelliteConstellation.GLONASS
+            in 120..158 -> SatelliteConstellation.SBAS
+            in 193..197 -> SatelliteConstellation.QZSS
+            in 201..237 -> SatelliteConstellation.BEIDOU
+            in 301..336 -> SatelliteConstellation.GALILEO
+            else -> SatelliteConstellation.UNKNOWN
+        }
+    }
+
+    private fun satelliteKey(constellation: SatelliteConstellation, prn: Int): String =
+        "${constellation.name}:$prn"
+
+    private fun activeSatellites(): List<SatelliteInfo> =
+        satelliteMap.values.map { it.satellite }
+
+    private fun purgeStaleSatellites(now: Long) {
+        val iterator = satelliteMap.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (now - entry.value.lastSeenAt > SATELLITE_STALE_MS) {
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun modeToFixQuality(mode: String): Int {
+        return when {
+            mode.contains('R', ignoreCase = true) -> 4
+            mode.contains('F', ignoreCase = true) -> 5
+            mode.contains('D', ignoreCase = true) -> 2
+            mode.contains('A', ignoreCase = true) -> 1
+            mode.contains('E', ignoreCase = true) -> 6
+            mode.contains('M', ignoreCase = true) -> 7
+            mode.contains('S', ignoreCase = true) -> 8
+            else -> 0
         }
     }
 

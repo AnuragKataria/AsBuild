@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.ui.graphics.vector.ImageVector
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +105,12 @@ fun DashboardScreen(
                 title = "Location Tracking",
                 icon = Icons.Default.LocationOn,
                 onClick = onLocationTrackingClick
+            )
+
+            DashboardCard(
+                title = "Device",
+                icon = Icons.Default.Memory,
+                onClick = onNavigateToDgpsSettings
             )
         }
     }

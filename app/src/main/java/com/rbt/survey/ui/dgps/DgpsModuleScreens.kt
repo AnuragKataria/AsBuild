@@ -126,6 +126,7 @@ fun DgpsHomeScreen(
     viewModel: DgpsViewModel,
     onBack: () -> Unit,
     onCommunicationClick: () -> Unit,
+    onSelfCheckClick: () -> Unit,
     onRoverClick: () -> Unit,
     onBaseClick: () -> Unit,
     onStaticClick: () -> Unit,
@@ -150,15 +151,8 @@ fun DgpsHomeScreen(
 
     val tiles = listOf(
         DgpsTile("Communication", Icons.Default.Bluetooth, onCommunicationClick),
-        DgpsTile("Rover", Icons.Default.MyLocation, onRoverClick),
-        DgpsTile("Base", Icons.Default.Radio, onBaseClick),
-        DgpsTile("Static", Icons.Default.Straighten, onStaticClick),
-        DgpsTile("Inspection Accuracy", Icons.Default.Route, onInspectionAccuracyClick),
-        DgpsTile("Device Information", Icons.Default.Info, onDeviceInformationClick),
-        DgpsTile("Device Settings", Icons.Default.Settings, onDeviceSettingsClick),
-        DgpsTile("NMEA Settings", Icons.Default.Tune, onNmeaSettingsClick),
-        DgpsTile("Position Information", Icons.Default.Map, onPositionInformationClick),
-        DgpsTile("GNSS System", Icons.Default.Public, onGnssSystemClick)
+        DgpsTile("Self Check", Icons.Default.Radar, onSelfCheckClick),
+        DgpsTile("Position Information", Icons.Default.Map, onPositionInformationClick)
     )
 
     Scaffold(
@@ -1555,24 +1549,26 @@ private fun formatOptionalDecimal(value: Float?): String {
 }
 
 private fun formatLocalTime(utcDateTime: String?, timeZone: String): String {
-    if (utcDateTime.isNullOrBlank()) return "2-11-29 19:00:00.000"
+    if (utcDateTime.isNullOrBlank()) return "--"
     return try {
-        val targetZone = parseZoneId(timeZone)
-        if (utcDateTime.contains("-")) {
-            val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-            val utc = LocalDateTime.parse(utcDateTime, formatter)
-                .atOffset(ZoneOffset.UTC)
-                .atZoneSameInstant(targetZone)
-            utc.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+        val targetZone = parseDisplayZoneId(timeZone)
+        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        val utc = if (utcDateTime.contains("-")) {
+            LocalDateTime.parse(utcDateTime, formatter).atOffset(ZoneOffset.UTC)
         } else {
-            utcDateTime
+            val todayUtc = java.time.LocalDate.now(ZoneOffset.UTC)
+            LocalDateTime.parse("${todayUtc} $utcDateTime", formatter).atOffset(ZoneOffset.UTC)
         }
+        utc.atZoneSameInstant(targetZone).format(formatter)
     } catch (_: Exception) {
         utcDateTime
     }
 }
 
-private fun parseZoneId(zoneText: String): ZoneId {
+private fun parseDisplayZoneId(zoneText: String): ZoneId {
+    if (zoneText.isBlank() || zoneText == "UTC+08:00") {
+        return ZoneId.systemDefault()
+    }
     return try {
         val offset = zoneText.removePrefix("UTC")
         ZoneOffset.of(offset)
