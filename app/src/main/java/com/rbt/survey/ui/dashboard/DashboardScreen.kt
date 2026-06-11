@@ -1,8 +1,11 @@
 package com.rbt.survey.ui.dashboard
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Logout
@@ -20,6 +23,8 @@ import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import com.rbt.survey.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,38 +85,81 @@ fun DashboardScreen(
         }
     ) { paddingValues ->
 
-        Column(
+//        Column(
+//            modifier = Modifier
+//                .fillMaxSize()
+//                .padding(paddingValues)
+//                .padding(20.dp),
+//            verticalArrangement = Arrangement.spacedBy(20.dp),
+//            horizontalAlignment = Alignment.CenterHorizontally
+//        ) {
+//
+//            DashboardCard(
+//                title = "Inventory",
+//                icon = Icons.Default.Inventory,
+//                onClick = onInventoryClick
+//            )
+//
+//            DashboardCard(
+//                title = "Survey",
+//                icon = Icons.Default.Assignment,
+//                onClick = onSurveyClick
+//            )
+//
+//            DashboardCard(
+//                title = "Location Tracking",
+//                icon = Icons.Default.LocationOn,
+//                onClick = onLocationTrackingClick
+//            )
+//
+//            DashboardCard(
+//                title = "Device",
+//                icon = Icons.Default.Memory,
+//                onClick = onNavigateToDgpsSettings
+//            )
+//        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            DashboardCard(
-                title = "Inventory",
-                icon = Icons.Default.Inventory,
-                onClick = onInventoryClick
-            )
+            item {
+                DashboardCard(
+                    title = "Inventory",
+                    icon = Icons.Default.Inventory,
+                    onClick = onInventoryClick
+                )
+            }
 
-            DashboardCard(
-                title = "Survey",
-                icon = Icons.Default.Assignment,
-                onClick = onSurveyClick
-            )
+            item {
+                DashboardCard(
+                    title = "Survey",
+                    imageRes = R.drawable.survey,
+                    onClick = onSurveyClick
+                )
+            }
 
-            DashboardCard(
-                title = "Location Tracking",
-                icon = Icons.Default.LocationOn,
-                onClick = onLocationTrackingClick
-            )
+            item {
+                DashboardCard(
+                    title = "Location Tracking",
+                    imageRes = R.drawable.location_track,
+                    onClick = onLocationTrackingClick
+                )
+            }
 
-            DashboardCard(
-                title = "Device",
-                icon = Icons.Default.Memory,
-                onClick = onNavigateToDgpsSettings
-            )
+            item {
+                DashboardCard(
+                    title = "Device",
+                    imageRes = R.drawable.device_connection,
+                    onClick = onNavigateToDgpsSettings
+                )
+            }
         }
     }
 }
@@ -119,13 +167,14 @@ fun DashboardScreen(
 @Composable
 fun DashboardCard(
     title: String,
-    icon: ImageVector,
+    icon: ImageVector? = null,
+    imageRes: Int? = null,
     onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .aspectRatio(1f)
             .clickable { onClick() },
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -137,27 +186,91 @@ fun DashboardCard(
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         )
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
+            when {
+                imageRes != null -> {
+                    Image(
+                        painter = painterResource(imageRes),
+                        contentDescription = title,
+                        modifier = Modifier.size(72.dp)
+                    )
+                }
 
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(40.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+                icon != null -> {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        modifier = Modifier.size(72.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+//            Icon(
+//                imageVector = icon,
+//                contentDescription = null,
+//                modifier = Modifier.size(64.dp),
+//                tint = MaterialTheme.colorScheme.primary
+//            )
 
-            Spacer(modifier = Modifier.width(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
         }
     }
 }
+
+//@Composable
+//fun DashboardCard(
+//    title: String,
+//    icon: ImageVector,
+//    onClick: () -> Unit
+//) {
+//    Card(
+//        modifier = Modifier
+//            .fillMaxWidth()
+//            .height(120.dp)
+//            .clickable { onClick() },
+//        shape = RoundedCornerShape(20.dp),
+//        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+//        colors = CardDefaults.cardColors(
+//            containerColor = MaterialTheme.colorScheme.surface
+//        ),
+//        border = BorderStroke(
+//            1.dp,
+//            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+//        )
+//    ) {
+//        Row(
+//            modifier = Modifier
+//                .fillMaxSize()
+//                .padding(20.dp),
+//            verticalAlignment = Alignment.CenterVertically
+//        ) {
+//
+//            Icon(
+//                imageVector = icon,
+//                contentDescription = null,
+//                modifier = Modifier.size(40.dp),
+//                tint = MaterialTheme.colorScheme.primary
+//            )
+//
+//            Spacer(modifier = Modifier.width(20.dp))
+//
+//            Text(
+//                text = title,
+//                style = MaterialTheme.typography.titleLarge,
+//                fontWeight = FontWeight.SemiBold
+//            )
+//        }
+//    }
+//}

@@ -45,7 +45,7 @@ import com.rbt.survey.ui.dgps.DgpsViewModelFactory
 import com.rbt.survey.ui.dgps.BluetoothDeviceListScreen
 import com.rbt.survey.ui.dgps.BaseModeSettingsScreen
 import com.rbt.survey.ui.dgps.DeviceInformationScreen
-import com.rbt.survey.ui.dgps.DeviceSelfCheckScreen
+//import com.rbt.survey.ui.dgps.DeviceSelfCheckScreen
 import com.rbt.survey.ui.dgps.DeviceSettingsScreen
 import com.rbt.survey.ui.dgps.DgpsHomeScreen
 import com.rbt.survey.ui.dgps.GnssSystemScreen
@@ -382,20 +382,20 @@ fun AppNavigation() {
                 )
             }
 
-            composable(Screen.DgpsSelfCheck.route) {
-                val parentEntry = remember {
-                    navController.getBackStackEntry(Screen.DgpsSettings.route)
-                }
-                val dgpsViewModel: DgpsViewModel = viewModel(
-                    parentEntry,
-                    factory = DgpsViewModelFactory(preferences, dgpsManager)
-                )
-                DeviceSelfCheckScreen(
-                    viewModel = dgpsViewModel,
-                    onBack = { navController.popBackStack() },
-                    onOpenCommunication = { navController.navigate(Screen.BluetoothDeviceList.route) }
-                )
-            }
+//            composable(Screen.DgpsSelfCheck.route) {
+//                val parentEntry = remember {
+//                    navController.getBackStackEntry(Screen.DgpsSettings.route)
+//                }
+//                val dgpsViewModel: DgpsViewModel = viewModel(
+//                    parentEntry,
+//                    factory = DgpsViewModelFactory(preferences, dgpsManager)
+//                )
+//                DeviceSelfCheckScreen(
+//                    viewModel = dgpsViewModel,
+//                    onBack = { navController.popBackStack() },
+//                    onOpenCommunication = { navController.navigate(Screen.BluetoothDeviceList.route) }
+//                )
+//            }
 
             composable(Screen.DgpsRover.route) {
                 val parentEntry = remember {
