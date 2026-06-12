@@ -16,6 +16,13 @@ captures/
 *.apk
 output-metadata.json
 
+.gradle/
+.gradle-home/
+.gradle-home-2/
+.idea/
+build/
+**/build/
+
 # IntelliJ
 *.iml
 .idea/
