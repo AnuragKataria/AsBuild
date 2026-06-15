@@ -1,0 +1,793 @@
+package com.rbt.survey.ui.form
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import android.os.Looper
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.*
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.*
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.rbt.survey.MyApplication
+import com.rbt.survey.R
+import com.rbt.survey.dgps.DgpsStatus
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MapScreen(
+    type: String,
+    fieldId: String,
+    initialValue: String,
+    radius: Int?,
+    onBack: () -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    val context = LocalContext.current
+    val gson = Gson()
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val dgpsManager = remember(context.applicationContext) {
+        (context.applicationContext as MyApplication).dgpsManager
+    }
+    val dgpsLocation by dgpsManager.location.collectAsState()
+    val dgpsStatus by dgpsManager.status.collectAsState()
+    val isMultiPointType = type.lowercase().contains("polygon") || type.lowercase().contains("polyline")
+    val hasDgpsFix = dgpsStatus is DgpsStatus.Connected && dgpsLocation != null
+
+    var mapType by remember { mutableStateOf(MapType.NORMAL) }
+    var showMapTypeDialog by remember { mutableStateOf(false) }
+    var showChoiceDialog by remember { mutableStateOf(false) }
+    var tempCurrentLocation by remember { mutableStateOf<LatLng?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+    var loadingMessage by remember { mutableStateOf("Please Wait...") }
+
+    var useCurrentLocationDirectly by remember { mutableStateOf(false) }
+
+    // Parse initial value
+    val initialPoints = remember {
+        try {
+            if (isMultiPointType) {
+                val listType = object : TypeToken<List<LatLng>>() {}.type
+                gson.fromJson<List<LatLng>>(initialValue, listType) ?: emptyList()
+            } else if (initialValue.contains("coordinates")) {
+                try {
+                    val coords: List<Double>? = when {
+                        // ✅ Case 1: Proper JSON
+                        initialValue.trim().startsWith("{\"") -> {
+                            val jsonObject = com.google.gson.JsonParser.parseString(initialValue).asJsonObject
+                            val array = jsonObject.getAsJsonArray("coordinates")
+                            array?.map { it.asDouble }
+                        }
+
+                        // ✅ Case 2: Map-like string → {type=Point, coordinates=[...]}
+                        initialValue.contains("coordinates=[") -> {
+                            val coordPart = initialValue
+                                .substringAfter("coordinates=[")
+                                .substringBefore("]")
+
+                            coordPart.split(",").mapNotNull {
+                                it.trim().toDoubleOrNull()
+                            }
+                        }
+
+                        else -> null
+                    }
+
+                    if (coords != null && coords.size == 2) {
+                        val lng = coords[0]
+                        val lat = coords[1]
+                        listOf(LatLng(lat, lng))
+                    } else {
+                        emptyList()
+                    }
+
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else if (initialValue.contains(",")) {
+                val parts = initialValue.split(",")
+                listOf(LatLng(parts[0].toDouble(), parts[1].toDouble()))
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    val hasExistingLocation = initialPoints.isNotEmpty()
+
+    var points by remember { mutableStateOf(initialPoints) }
+    var isTracking by remember { mutableStateOf(false) }
+    var currentAccuracy by remember { mutableStateOf<Float?>(null) }
+    var hasCenteredInitially by remember { mutableStateOf(false) }
+
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(points.firstOrNull() ?: LatLng(20.5937, 78.9629), 12f)
+    }
+
+    // Permission handling
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasLocationPermission = isGranted
+    }
+
+    // Location Tracking and Accuracy Logic
+    DisposableEffect(hasLocationPermission, isTracking, hasDgpsFix) {
+        if (hasLocationPermission && !hasDgpsFix) {
+            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 2000L).build()
+
+            val locationCallback = object : LocationCallback() {
+                override fun onLocationResult(result: LocationResult) {
+                    result.lastLocation?.let { location ->
+                        currentAccuracy = location.accuracy
+                        if (isTracking) {
+                            val newLatLng = LatLng(location.latitude, location.longitude)
+                            if (points.isEmpty() || distanceBetween(points.last(), newLatLng) > 2) {
+                                points = points + newLatLng
+                            }
+                        }
+                    }
+                }
+            }
+
+            try {
+                fusedLocationClient.requestLocationUpdates(
+                    locationRequest,
+                    locationCallback,
+                    Looper.getMainLooper()
+                )
+            } catch (e: SecurityException) {
+                if (isTracking) isTracking = false
+            }
+
+            onDispose {
+                fusedLocationClient.removeLocationUpdates(locationCallback)
+            }
+        } else {
+            onDispose {}
+        }
+    }
+
+    LaunchedEffect(hasDgpsFix, dgpsLocation?.timestamp, isTracking) {
+        val currentDgpsLocation = dgpsLocation
+        if (!hasDgpsFix || currentDgpsLocation == null) {
+            return@LaunchedEffect
+        }
+
+        currentAccuracy = currentDgpsLocation.accuracy
+        val newLatLng = LatLng(currentDgpsLocation.latitude, currentDgpsLocation.longitude)
+
+        if (isTracking && (points.isEmpty() || distanceBetween(points.last(), newLatLng) > 2)) {
+            points = points + newLatLng
+        }
+    }
+
+    // Auto-center once on current location if points are empty and accuracy is acquired
+    LaunchedEffect(hasDgpsFix, dgpsLocation?.timestamp, currentAccuracy) {
+        if (!hasCenteredInitially && points.isEmpty() && hasDgpsFix && dgpsLocation != null) {
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                LatLng(dgpsLocation!!.latitude, dgpsLocation!!.longitude),
+                16f
+            )
+            hasCenteredInitially = true
+            return@LaunchedEffect
+        }
+
+        if (!hasCenteredInitially && points.isEmpty() && currentAccuracy != null && !hasDgpsFix) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                location?.let {
+                    cameraPositionState.position = CameraPosition.fromLatLngZoom(LatLng(it.latitude, it.longitude), 16f)
+                    hasCenteredInitially = true
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(points, radius) {
+        if (!isMultiPointType && points.isNotEmpty() && radius != null) {
+
+            val bounds = getBoundsForCircle(points.first(), radius.toDouble())
+
+            try {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngBounds(bounds, 100)
+                )
+            } catch (e: Exception) {
+                // fallback
+            }
+        }
+    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(when {
+                        type.lowercase().contains("polygon") -> "Map Polygon"
+                        type.lowercase().contains("polyline") -> "Map Line"
+                        else -> "Map Point"
+                    })
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = {
+
+                        if (isMultiPointType) {
+                            onSave(fieldId, gson.toJson(points))
+                            return@TextButton
+                        }
+
+                        // ✅ TEST MODE (checkbox checked)
+                        if (useCurrentLocationDirectly) {
+
+                            if (!hasDgpsFix && !isLocationEnabled(context)) {
+                                Toast.makeText(context, "Please enable location", Toast.LENGTH_LONG).show()
+                                return@TextButton
+                            }
+
+                            isLoading = true
+                            loadingMessage = "Fetching location..."
+
+                            getFreshLocation(
+                                fusedLocationClient,
+                                dgpsStatus = dgpsStatus,
+                                dgpsLocation = dgpsLocation,
+                                onLocation = { currentLatLng ->
+
+                                    isLoading = false
+
+                                    // still show choice dialog
+                                    tempCurrentLocation = currentLatLng
+                                    showChoiceDialog = true
+                                },
+                                onError = {
+                                    isLoading = false
+                                    Toast.makeText(context, "Unable to fetch location", Toast.LENGTH_LONG).show()
+                                }
+                            )
+
+                            return@TextButton
+                        }
+
+
+                        // ✅ SCENARIO 2 & 3 HANDLING
+
+                        // Step 1: Check GPS
+                        if (!hasDgpsFix && !isLocationEnabled(context)) {
+                            Toast.makeText(context, "Please enable location", Toast.LENGTH_LONG).show()
+                            return@TextButton
+                        }
+
+                        isLoading = true
+                        loadingMessage = "Fetching location..."
+
+                        // Step 2: Get CURRENT location (real-time)
+                        getFreshLocation(
+                            fusedLocationClient,
+                            dgpsStatus = dgpsStatus,
+                            dgpsLocation = dgpsLocation,
+                            onLocation = { currentLatLng ->
+
+                                loadingMessage = "Calculating distance..."
+
+                                // ✅ CASE 2: LatLng + Radius exists
+                                if (initialPoints.isNotEmpty() && radius != null) {
+
+                                    val existingPoint = initialPoints.first()
+                                    val distance = distanceBetween(existingPoint, currentLatLng)
+
+                                    if (distance > radius) {
+                                        isLoading = false
+                                        Toast.makeText(context, "You are outside allowed radius", Toast.LENGTH_LONG).show()
+                                    } else {
+
+                                        isLoading = false
+                                        // Show choice dialog
+                                        showChoiceDialog = true
+
+                                        // Store temp current location
+                                        tempCurrentLocation = currentLatLng
+                                    }
+
+                                }
+                                // ✅ CASE 3: Only radius (no latlng)
+                                else if (initialPoints.isEmpty() && radius != null) {
+
+                                    val value = "${currentLatLng.latitude},${currentLatLng.longitude}"
+                                    isLoading = false
+                                    onSave(fieldId, value)
+                                }
+                                // ✅ Normal single point (no radius)
+                                else {
+                                    val value = "${currentLatLng.latitude},${currentLatLng.longitude}"
+                                    isLoading = false
+                                    onSave(fieldId, value)
+                                }
+                            },
+                            onError = {
+                                isLoading = false
+                                Toast.makeText(context, "Unable to fetch location", Toast.LENGTH_LONG).show()
+                            }
+                        )
+
+                    }) {
+                        Text("Save", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                properties = MapProperties(isMyLocationEnabled = hasLocationPermission,mapType = mapType),
+                uiSettings = MapUiSettings(myLocationButtonEnabled = true),
+                onMapClick = { latLng ->
+//                    if (!isTracking) {
+//                        if (isMultiPointType) {
+//                            points = points + latLng
+//                        } else {
+//                            points = listOf(latLng)
+//                        }
+//                    }
+                    if (!isMultiPointType) return@GoogleMap
+
+                    if (!isTracking) {
+                        points = points + latLng
+                    }
+                }
+            ) {
+                if (type.lowercase().contains("polygon")) {
+                    points.forEach { point ->
+                        Marker(state = MarkerState(position = point))
+                    }
+                    if (points.size >= 2) {
+                        Polygon(
+                            points = points,
+                            fillColor = Color.Blue.copy(alpha = 0.2f),
+                            strokeColor = Color.Blue,
+                            strokeWidth = 5f
+                        )
+                    }
+                } else if (type.lowercase().contains("polyline")) {
+                    points.forEach { point -> Marker(state = MarkerState(position = point)) }
+                    if (points.size >= 2) {
+                        Polyline(
+                            points = points,
+                            color = Color.Blue,
+                            width = 10f
+                        )
+                    }
+                } else {
+                    points.firstOrNull()?.let { point ->
+
+                        // ✅ Marker
+                        Marker(state = MarkerState(position = point))
+
+                        // ✅ Radius Circle (only if radius exists)
+                        if (radius != null) {
+                            Circle(
+                                center = point,
+                                radius = radius.toDouble(), // meters
+                                strokeColor = Color.Blue,
+                                strokeWidth = 3f,
+                                fillColor = Color.Red.copy(alpha = 0.15f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 65.dp, end = 10.dp), // position under location button
+                contentAlignment = Alignment.TopEnd
+            ) {
+                FloatingActionButton(
+                    onClick = { showMapTypeDialog = true },
+                    modifier = Modifier.size(45.dp),
+                    containerColor = Color.White,
+                    contentColor = Color.Black
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Layers,
+                        contentDescription = "Map Type"
+                    )
+                }
+                if (showMapTypeDialog) {
+                    androidx.compose.ui.window.Dialog(
+                        onDismissRequest = { showMapTypeDialog = false }
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White
+                        ) {
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .padding(16.dp)
+                            ) {
+
+                                // Header
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Map Type",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = Color.Black
+                                    )
+
+                                    IconButton(onClick = { showMapTypeDialog = false }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = null,
+                                            tint = Color.Black
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                MapTypeItem("Normal", R.drawable.defaultmap) {
+                                    mapType = MapType.NORMAL
+                                    showMapTypeDialog = false
+                                }
+
+                                MapTypeItem("Satellite", R.drawable.satellite) {
+                                    mapType = MapType.SATELLITE
+                                    showMapTypeDialog = false
+                                }
+
+                                MapTypeItem("Terrain", R.drawable.terrain) {
+                                    mapType = MapType.TERRAIN
+                                    showMapTypeDialog = false
+                                }
+
+                                MapTypeItem("Hybrid", R.drawable.hybrid) {
+                                    mapType = MapType.HYBRID
+                                    showMapTypeDialog = false
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Controls
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (isMultiPointType) {
+                    FloatingActionButton(
+                        onClick = {
+                            if (!hasLocationPermission && !hasDgpsFix) {
+                                permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                            } else {
+                                isTracking = !isTracking
+                            }
+                        },
+                        containerColor = if (isTracking) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    ) {
+                        Icon(
+                            imageVector = if (isTracking) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = "Toggle Tracking",
+                            tint = Color.White
+                        )
+                    }
+                }
+
+                if (!isTracking && isMultiPointType) {
+                    if (points.isNotEmpty()) {
+                        FloatingActionButton(
+                            onClick = { points = points.dropLast(1) },
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Icon(Icons.Default.Undo, "Undo")
+                        }
+                    }
+
+                    FloatingActionButton(
+                        onClick = { points = emptyList() },
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Icon(Icons.Default.Delete, "Clear")
+                    }
+                }
+            }
+
+            // Accuracy and Tracking Status Indicator
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Accuracy Badge
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp).copy(alpha = 0.9f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                    shadowElevation = 8.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.GpsFixed,
+                                contentDescription = null,
+                                tint = if (currentAccuracy != null && currentAccuracy!! < 10) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "${if (hasDgpsFix) "DGPS" else "GPS"} | Solution: ${
+                                    if (hasDgpsFix) formatFixQualityLabel(dgpsLocation?.fixQuality) else "Waiting"
+                                } | Sats: ${dgpsLocation?.satellites ?: 0}",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = "HRMS: ${formatMetricValue(dgpsLocation?.hrms)} | VRMS: ${formatMetricValue(dgpsLocation?.vrms)} | Acc: ${
+                                currentAccuracy?.let { String.format("%.1f m", it) } ?: "..."
+                            }",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                        )
+                    }
+                }
+
+                if (isTracking) {
+                    Surface(
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f),
+                        shadowElevation = 4.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.LocationOn, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Auto-Tracking Active", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+
+            if (showChoiceDialog) {
+                AlertDialog(
+                    onDismissRequest = { showChoiceDialog = false },
+                    title = { Text("Choose Location") },
+                    text = { Text("Do you want to keep existing location or save current location?") },
+
+                    confirmButton = {
+                        TextButton(onClick = {
+                            // ✅ Save CURRENT location
+                            showChoiceDialog = false
+
+                            tempCurrentLocation?.let {
+                                val value = "${it.latitude},${it.longitude}"
+                                onSave(fieldId, value)
+                            }
+                        }) {
+                            Text("Save Current Location")
+                        }
+                    },
+
+                    dismissButton = {
+                        TextButton(onClick = {
+                            // ✅ Keep EXISTING location
+                            showChoiceDialog = false
+                            onBack()
+                        }) {
+                            Text("Use Existing Location")
+                        }
+                    }
+                )
+            }
+
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.4f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                        CircularProgressIndicator()
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = loadingMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = androidx.compose.ui.graphics.Color.White
+                        )
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.TopStart
+            ) {
+                Row(
+                    modifier = Modifier
+                        .background(
+                            color = androidx.compose.ui.graphics.Color.White,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    Checkbox(
+                        checked = useCurrentLocationDirectly,
+                        onCheckedChange = { useCurrentLocationDirectly = it }
+                    )
+
+                    Text(
+                        text = "Test Mode",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.ui.graphics.Color.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MapTypeItem(
+    title: String,
+    imageRes: Int,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Image(
+            painter = painterResource(id = imageRes),
+            contentDescription = title,
+            modifier = Modifier.size(50.dp)
+        )
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Text(
+            text = title,
+            color = Color.Black
+        )
+    }
+}
+
+
+@SuppressLint("MissingPermission")
+private fun getFreshLocation(
+    fusedLocationClient: FusedLocationProviderClient,
+    dgpsStatus: DgpsStatus,
+    dgpsLocation: com.rbt.survey.dgps.DgpsLocation?,
+    onLocation: (LatLng) -> Unit,
+    onError: () -> Unit
+) {
+    if (dgpsStatus is DgpsStatus.Connected && dgpsLocation != null) {
+        onLocation(LatLng(dgpsLocation.latitude, dgpsLocation.longitude))
+        return
+    }
+
+    val locationRequest = LocationRequest.Builder(
+        Priority.PRIORITY_HIGH_ACCURACY, 1000L
+    ).setMaxUpdates(1).build()
+
+    val callback = object : LocationCallback() {
+        override fun onLocationResult(result: LocationResult) {
+            fusedLocationClient.removeLocationUpdates(this)
+            val location = result.lastLocation
+            if (location != null) {
+                onLocation(LatLng(location.latitude, location.longitude))
+            } else {
+                onError()
+            }
+        }
+    }
+
+    try {
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            callback,
+            Looper.getMainLooper()
+        )
+    } catch (e: Exception) {
+        onError()
+    }
+}
+
+private fun formatFixQualityLabel(fixQuality: Int?): String {
+    return when (fixQuality ?: 0) {
+        1 -> "Single"
+        2 -> "DGPS"
+        4 -> "Fixed"
+        5 -> "Float"
+        else -> "No Solution"
+    }
+}
+
+private fun formatMetricValue(value: Float?): String {
+    return value?.takeIf { it > 0f }?.let { String.format("%.3f", it) } ?: "--"
+}
+
+private fun getBoundsForCircle(center: LatLng, radius: Double): com.google.android.gms.maps.model.LatLngBounds {
+    val distance = radius / 111320f // approx meters to degrees
+
+    val southWest = LatLng(
+        center.latitude - distance,
+        center.longitude - distance
+    )
+
+    val northEast = LatLng(
+        center.latitude + distance,
+        center.longitude + distance
+    )
+
+    return com.google.android.gms.maps.model.LatLngBounds(southWest, northEast)
+}
+
+private fun distanceBetween(p1: LatLng, p2: LatLng): Float {
+    val results = FloatArray(1)
+    android.location.Location.distanceBetween(p1.latitude, p1.longitude, p2.latitude, p2.longitude, results)
+    return results[0]
+}
