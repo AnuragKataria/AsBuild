@@ -168,6 +168,44 @@ interface CachedUploadedSubmissionDao {
     suspend fun deleteByFormId(formId: Int)
 }
 
+@Entity(tableName = "cached_option_segment")
+data class CachedOptionSegmentEntity(
+
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
+
+    val blockCode: String,
+
+    val spanId: String,
+    val fromGp: String,
+    val toGp: String,
+
+    val geometry: String
+)
+
+@Dao
+interface CachedOptionSegmentDao {
+
+    @Query(
+        "SELECT * FROM cached_option_segment WHERE blockCode = :blockCode"
+    )
+    suspend fun getByBlockCode(
+        blockCode: String
+    ): List<CachedOptionSegmentEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(
+        items: List<CachedOptionSegmentEntity>
+    )
+
+    @Query(
+        "DELETE FROM cached_option_segment WHERE blockCode = :blockCode"
+    )
+    suspend fun deleteByBlockCode(
+        blockCode: String
+    )
+}
+
 @Database(
     entities = [
         FormDraft::class,
@@ -178,9 +216,10 @@ interface CachedUploadedSubmissionDao {
         CachedBlockAssignment::class,
         CachedBlockSummary::class,
         CachedUploadedSubmission::class,
-        LocationEntity::class
+        LocationEntity::class,
+        CachedOptionSegmentEntity::class
     ],
-    version = 7
+    version = 8
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun formDraftDao(): FormDraftDao
@@ -192,6 +231,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun cachedBlockSummaryDao(): CachedBlockSummaryDao
     abstract fun cachedUploadedSubmissionDao(): CachedUploadedSubmissionDao
     abstract fun locationDao(): LocationDao
+    abstract fun cachedOptionSegmentDao(): CachedOptionSegmentDao
 
     companion object {
         @Volatile
@@ -267,6 +307,24 @@ abstract class AppDatabase : RoomDatabase() {
                 `heading` REAL,
                 `deviceType` TEXT NOT NULL,
                 `recordedAt` TEXT NOT NULL
+            )
+            """.trimIndent()
+                )
+            }
+        }
+
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+
+                database.execSQL(
+                    """
+            CREATE TABLE IF NOT EXISTS `cached_option_segment` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `blockCode` TEXT NOT NULL,
+                `spanId` TEXT NOT NULL,
+                `fromGp` TEXT NOT NULL,
+                `toGp` TEXT NOT NULL,
+                `geometry` TEXT NOT NULL
             )
             """.trimIndent()
                 )

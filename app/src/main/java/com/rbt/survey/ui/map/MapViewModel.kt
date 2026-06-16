@@ -7,10 +7,14 @@ import com.google.maps.android.compose.MapType
 import com.rbt.survey.data.model.GpItem
 import com.rbt.survey.data.model.GpMapItem
 import com.rbt.survey.data.model.GpStatus
+import com.rbt.survey.data.model.MapLineItem
+import com.rbt.survey.data.remote.TnctApi
 import com.rbt.survey.data.repository.FormRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import com.google.android.gms.maps.model.LatLng
+import kotlin.random.Random
 
 class MapViewModel(
     private val repository: FormRepository
@@ -22,6 +26,10 @@ class MapViewModel(
 
     private val _gpList = MutableStateFlow<List<GpMapItem>>(emptyList())
     val gpList: StateFlow<List<GpMapItem>> = _gpList
+
+    private val _lineList = MutableStateFlow<List<MapLineItem>>(emptyList())
+
+    val lineList: StateFlow<List<MapLineItem>> = _lineList
 
     private var completedGpSet: Set<String> = emptySet()
 
@@ -51,73 +59,84 @@ class MapViewModel(
             _isLoading.value = true
 
             try {
-                val response = repository.getFormDetail(formId, blockCode)
+                if (formId == 11) {
 
-                if (response.isSuccessful && response.body()?.success == true) {
-
-                    val formData = response.body()?.data!!
-
-                    // ✅ GET GP FIELD FROM currentVersion
-                    val gpField = formData.currentVersion
-                        ?.schema
-                        ?.fields
-                        ?.find { it.id == "GP" }
-
-                    // ✅ MAP OPTIONS TO GP LIST
-                    val list = gpField?.options?.mapNotNull { option ->
-
-                        val map = option as? Map<*, *> ?: return@mapNotNull null
-
-                        val name = map["Label"]?.toString() ?: return@mapNotNull null
-                        val raw = map["Raw"] as? Map<*, *> ?: return@mapNotNull null
-
-                        val newLocation = raw["NewGpLocation"]?.toString()
-                        val location = map["GpLocation"]?.toString()
-
-                        var lat: Double? = null
-                        var lng: Double? = null
-
-                        // ✅ Case 1: Use NewGpLocation if present
-                        if (!newLocation.isNullOrEmpty() && newLocation != "null") {
-                            try {
-                                val json = org.json.JSONObject(newLocation)
-                                val coordinates = json.getJSONArray("coordinates")
-
-                                // GeoJSON → [lng, lat]
-                                lng = coordinates.getDouble(0)
-                                lat = coordinates.getDouble(1)
-
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-                        }
-
-                        // ✅ Case 2: Else use GpLocation (JSON)
-                        else if (!location.isNullOrEmpty()) {
-                            try {
-                                val json = org.json.JSONObject(location)
-                                lat = json.optDouble("lat")
-                                lng = json.optDouble("lng")
-                            } catch (e: Exception) {
-                                e.printStackTrace()
-                            }
-                        }
-
-                        // ❌ Skip if invalid
-                        if (lat == null || lng == null) return@mapNotNull null
-                        val lgdCode = raw?.get("LgdCode")?.toString()
-
-                        GpMapItem(
-                            name = name,
-                            lat = lat,
-                            lng = lng,
-                            lgdCode = lgdCode,
-                            isCompleted = lgdCode != null && completedGpSet.contains(lgdCode)
+                    _lineList.value =
+                        repository.getOptionSegments(
+                            "714"
                         )
 
-                    } ?: emptyList()
+                    _isLoading.value = false
+                    return@launch
+                } else {
+                    val response = repository.getFormDetail(formId, blockCode)
 
-                    _gpList.value = list
+                    if (response.isSuccessful && response.body()?.success == true) {
+
+                        val formData = response.body()?.data!!
+
+                        // ✅ GET GP FIELD FROM currentVersion
+                        val gpField = formData.currentVersion
+                            ?.schema
+                            ?.fields
+                            ?.find { it.id == "GP" }
+
+                        // ✅ MAP OPTIONS TO GP LIST
+                        val list = gpField?.options?.mapNotNull { option ->
+
+                            val map = option as? Map<*, *> ?: return@mapNotNull null
+
+                            val name = map["Label"]?.toString() ?: return@mapNotNull null
+                            val raw = map["Raw"] as? Map<*, *> ?: return@mapNotNull null
+
+                            val newLocation = raw["NewGpLocation"]?.toString()
+                            val location = map["GpLocation"]?.toString()
+
+                            var lat: Double? = null
+                            var lng: Double? = null
+
+                            // ✅ Case 1: Use NewGpLocation if present
+                            if (!newLocation.isNullOrEmpty() && newLocation != "null") {
+                                try {
+                                    val json = org.json.JSONObject(newLocation)
+                                    val coordinates = json.getJSONArray("coordinates")
+
+                                    // GeoJSON → [lng, lat]
+                                    lng = coordinates.getDouble(0)
+                                    lat = coordinates.getDouble(1)
+
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+
+                            // ✅ Case 2: Else use GpLocation (JSON)
+                            else if (!location.isNullOrEmpty()) {
+                                try {
+                                    val json = org.json.JSONObject(location)
+                                    lat = json.optDouble("lat")
+                                    lng = json.optDouble("lng")
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+
+                            // ❌ Skip if invalid
+                            if (lat == null || lng == null) return@mapNotNull null
+                            val lgdCode = raw?.get("LgdCode")?.toString()
+
+                            GpMapItem(
+                                name = name,
+                                lat = lat,
+                                lng = lng,
+                                lgdCode = lgdCode,
+                                isCompleted = lgdCode != null && completedGpSet.contains(lgdCode)
+                            )
+
+                        } ?: emptyList()
+
+                        _gpList.value = list
+                    }
                 }
 
             } catch (e: Exception) {

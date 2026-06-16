@@ -2,6 +2,7 @@ package com.rbt.survey.ui.map
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.rbt.survey.data.remote.TnctApi
 import com.rbt.survey.data.repository.FormRepository
 
 class MapViewModelFactory(

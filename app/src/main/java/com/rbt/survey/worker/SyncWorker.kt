@@ -23,6 +23,7 @@ class SyncWorker(
         val database = AppDatabase.getDatabase(applicationContext)
         val preferences = UserPreferences(applicationContext)
         val authApi = RetrofitClient.getAuthenticatedApi(applicationContext, preferences)
+        val tnctApi = RetrofitClient.getTnctApi(applicationContext)
         
         val repository = FormRepository(
             authApi,
@@ -30,7 +31,9 @@ class SyncWorker(
             database.offlineSubmissionDao(),
             database.cachedFormDao(),
             database.cachedFormDetailDao(),
-            database.pendingFileUploadDao()
+            database.pendingFileUploadDao(),
+            tnctApi,
+            database.cachedOptionSegmentDao()
         )
 
         // 1. Process Pending File Uploads

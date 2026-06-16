@@ -51,7 +51,12 @@ import kotlinx.coroutines.launch
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.Polyline
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.gson.Gson
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,11 +67,12 @@ fun MapScreen(
     gpStatusList: List<GpItem>,
     surveyRadius: Int?,
     onBack: () -> Unit,
-    onMarkerClick: (Int, String?, String?, Int?) -> Unit
+    onMarkerClick: (Int, String?, String?, Int?) -> Unit,
+    onLineClick: (Int, String?, String, Int?) -> Unit
 ) {
 
     val gpList by viewModel.gpList.collectAsState()
-
+    val lineList by viewModel.lineList.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
     val cameraPositionState = rememberCameraPositionState {
@@ -131,6 +137,25 @@ fun MapScreen(
         }
     }
 
+    LaunchedEffect(lineList) {
+
+        if (lineList.isEmpty()) return@LaunchedEffect
+
+        val builder = LatLngBounds.Builder()
+
+        lineList.forEach { line ->
+            line.points.forEach { point ->
+                builder.include(point)
+            }
+        }
+
+        val bounds = builder.build()
+
+        cameraPositionState.move(
+            CameraUpdateFactory.newLatLngBounds(bounds, 100)
+        )
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -158,6 +183,71 @@ fun MapScreen(
                 cameraPositionState = cameraPositionState,
                 properties = MapProperties(mapType = mapType,isMyLocationEnabled = hasPermission)
             ) {
+
+                lineList.forEach { line ->
+
+                    Polyline(
+                        points = line.points,
+                        color = Color(line.color),
+                        clickable = true,
+                        onClick = {
+
+                            Toast.makeText(
+                                context,
+                                "${line.fromGp} → ${line.toGp}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+
+                            val geometryJson = Gson().toJson(line.points)
+
+                            onLineClick(
+                                formId,
+                                blockCode,
+                                geometryJson,
+                                surveyRadius
+                            )
+
+                        }
+                    )
+
+//                    if (line.points.isNotEmpty()) {
+//
+//                        val startPoint = line.points.first()
+//
+//                        val startBitmap = createLabeledSquareMarker(
+//                            text = line.fromGp,
+//                            squareColor = android.graphics.Color.BLUE,
+//                            squareSize = 30,
+//                            textSizeSp = 12f,
+//                            textColor = android.graphics.Color.BLUE,
+//                            context = context
+//                        )
+//
+//                        Marker(
+//                            state = MarkerState(startPoint),
+//                            icon = BitmapDescriptorFactory.fromBitmap(startBitmap)
+//                        )
+//                    }
+//
+//                    if (line.points.isNotEmpty()) {
+//
+//                        val endPoint = line.points.last()
+//
+//                        val endBitmap = createLabeledSquareMarker(
+//                            text = line.toGp,
+//                            squareColor = android.graphics.Color.GREEN,
+//                            squareSize = 30,
+//                            textSizeSp = 12f,
+//                            textColor = android.graphics.Color.GREEN,
+//                            context = context
+//                        )
+//
+//                        Marker(
+//                            state = MarkerState(endPoint),
+//                            icon = BitmapDescriptorFactory.fromBitmap(endBitmap)
+//                        )
+//                    }
+                }
 
                 gpList.forEach { gp ->
 

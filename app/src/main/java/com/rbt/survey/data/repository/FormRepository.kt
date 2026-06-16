@@ -1,5 +1,6 @@
 package com.rbt.survey.data.repository
 
+import com.google.android.gms.maps.model.LatLng
 import com.rbt.survey.data.local.db.FormDraft
 import com.rbt.survey.data.local.db.FormDraftDao
 import com.rbt.survey.data.model.FormDetailResponse
@@ -22,6 +23,11 @@ import com.rbt.survey.data.local.db.CachedFormDetailDao
 import com.rbt.survey.data.local.db.PendingFileUpload
 import com.rbt.survey.data.local.db.PendingFileUploadDao
 import com.google.gson.Gson
+import com.rbt.survey.data.local.db.CachedOptionSegmentDao
+import com.rbt.survey.data.local.db.CachedOptionSegmentEntity
+import com.rbt.survey.data.model.MapLineItem
+import com.rbt.survey.data.remote.TnctApi
+import kotlin.random.Random
 
 class FormRepository(
     private val authApi: AuthApi,
@@ -29,7 +35,9 @@ class FormRepository(
     private val offlineSubmissionDao: OfflineSubmissionDao,
     private val cachedFormDao: CachedFormDao,
     private val cachedFormDetailDao: CachedFormDetailDao,
-    private val pendingFileUploadDao: PendingFileUploadDao
+    private val pendingFileUploadDao: PendingFileUploadDao,
+    private val tnctApi: TnctApi,
+    private val cachedOptionSegmentDao: CachedOptionSegmentDao
 ) {
     private val gson = Gson()
 
@@ -165,5 +173,111 @@ class FormRepository(
 
     suspend fun submitForm(formId: Int, body: RequestBody): Response<okhttp3.ResponseBody> {
         return authApi.submitForm(formId, body)
+    }
+
+    suspend fun getOptionSegments(
+        blockCode: String
+    ): List<MapLineItem> {
+
+        return try {
+
+            val response =
+                tnctApi.getOptionSegmentLayerByBlockCode(
+                    blockCode
+                )
+
+            if (response.isSuccessful) {
+
+                val apiData = response.body() ?: emptyList()
+
+                cachedOptionSegmentDao.deleteByBlockCode(
+                    blockCode
+                )
+
+                cachedOptionSegmentDao.insertAll(
+                    apiData.map {
+                        CachedOptionSegmentEntity(
+                            blockCode = blockCode,
+                            spanId = it.spaN_ID ?: "",
+                            fromGp = it.fromgp ?: "",
+                            toGp = it.togp ?: "",
+                            geometry = it.geometry ?: ""
+                        )
+                    }
+                )
+
+                apiData.map {
+                    MapLineItem(
+                        fromGp = it.fromgp ?: "",
+                        toGp = it.togp ?: "",
+                        points = parseLineString(
+                            it.geometry ?: ""
+                        ),
+                        color = android.graphics.Color.rgb(
+                            Random.nextInt(50, 256),
+                            Random.nextInt(50, 256),
+                            Random.nextInt(50, 256)
+                        )
+                    )
+                }
+
+            } else {
+
+                loadFromCache(blockCode)
+
+            }
+
+        } catch (e: Exception) {
+
+            loadFromCache(blockCode)
+
+        }
+    }
+
+    private suspend fun loadFromCache(
+        blockCode: String
+    ): List<MapLineItem> {
+
+        return cachedOptionSegmentDao
+            .getByBlockCode(blockCode)
+            .map {
+
+                MapLineItem(
+                    fromGp = it.fromGp,
+                    toGp = it.toGp,
+                    points = parseLineString(
+                        it.geometry
+                    ),
+                    color = android.graphics.Color.rgb(
+                        Random.nextInt(50, 256),
+                        Random.nextInt(50, 256),
+                        Random.nextInt(50, 256)
+                    )
+                )
+            }
+    }
+
+    private fun parseLineString(
+        geometry: String
+    ): List<LatLng> {
+
+        return geometry
+            .removePrefix("LINESTRING(")
+            .removeSuffix(")")
+            .split(",")
+            .mapNotNull {
+
+                val parts = it.trim().split(" ")
+
+                if (parts.size < 2) return@mapNotNull null
+
+                val lng = parts[0].toDoubleOrNull()
+                val lat = parts[1].toDoubleOrNull()
+
+                if (lat == null || lng == null)
+                    null
+                else
+                    LatLng(lat, lng)
+            }
     }
 }

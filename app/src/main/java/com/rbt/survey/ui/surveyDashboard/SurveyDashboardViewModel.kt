@@ -339,6 +339,11 @@ class SurveyDashboardViewModel(
                 // 2. Fetch form detail for that block
                 repository.getFormDetail(formId, blockCode)
 
+                // Option Segment cache download
+                if (formId == 11) {
+                    repository.getOptionSegments("714")
+                }
+
                 // Done
                 Log.d("DOWNLOAD", "Block downloaded successfully")
 

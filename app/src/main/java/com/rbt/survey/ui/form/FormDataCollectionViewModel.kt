@@ -34,7 +34,8 @@ class FormDataCollectionViewModel(
     private val selectedGpName: String?,
     private val dgpsManager: DgpsManager,
     private val submissionId: Int? = null,
-    private val radius: Int? = null
+    private val radius: Int? = null,
+    private val lineGeometry: String? = null
 ) : ViewModel() {
     private val saveJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
 
@@ -53,6 +54,10 @@ class FormDataCollectionViewModel(
     val fieldValues = mutableStateMapOf<String, Any?>()
 
     init {
+        android.util.Log.d(
+            "FORM_NAV",
+            "GP=$selectedGpName Line=$lineGeometry"
+        )
         fetchFormDetail()
         loadDrafts()
     }
@@ -183,6 +188,14 @@ class FormDataCollectionViewModel(
                                 updateDependentMapFields("GP", selectedGpName, fields)
                             }
                         }
+                    }
+                    if (!lineGeometry.isNullOrBlank()) {
+
+                        android.util.Log.d(
+                            "LINE_FLOW",
+                            "Received Line Geometry"
+                        )
+
                     }
                 } else {
                     _uiState.value = FormUiState.Error(response.body()?.message ?: "Failed to load form details")

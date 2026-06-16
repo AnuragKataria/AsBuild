@@ -14,6 +14,7 @@ import javax.net.ssl.X509TrustManager
 
 object RetrofitClient {
     private const val BASE_URL = "https://webgis.rbt-ltd.com/api/"
+    private const val TNCT_BASE_URL = "https://tnct.rbt-ltd.com/api/Common/"
 
     private val logging = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -92,5 +93,15 @@ object RetrofitClient {
             .client(getUnsafeOkHttpClient(context, preferences))
             .build()
             .create(GeoApi::class.java)
+    }
+
+    fun getTnctApi(context: Context): TnctApi {
+
+        return Retrofit.Builder()
+            .baseUrl(TNCT_BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .client(getBasicUnsafeOkHttpClient(context))
+            .build()
+            .create(TnctApi::class.java)
     }
 }

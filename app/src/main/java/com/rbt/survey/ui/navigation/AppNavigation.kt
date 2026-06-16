@@ -79,8 +79,13 @@ sealed class Screen(val route: String) {
     object Dashboard : Screen("dashboard")
 
     object LocationTracking : Screen("location_tracking")
-    object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}&surveyRadius={surveyRadius}&submissionId={submissionId}") {
-        fun createRoute(formId: Int, blockCode: String?, gpName: String?,surveyRadius: Int?, submissionId: Int? = null) = "form_data/$formId?blockCode=${blockCode ?: ""}&gpName=${gpName ?: ""}&surveyRadius=${surveyRadius ?: -1}&submissionId=${submissionId ?: -1}"
+    object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}&surveyRadius={surveyRadius}&submissionId={submissionId}&lineGeometry={lineGeometry}") {
+        fun createRoute(formId: Int, blockCode: String?, gpName: String?,surveyRadius: Int?, submissionId: Int? = null, lineGeometry: String? = null) : String {
+
+            val encodedLine = URLEncoder.encode(lineGeometry ?: "","UTF-8")
+
+            return "form_data/$formId?blockCode=${blockCode ?: ""}&gpName=${gpName ?: ""}&surveyRadius=${surveyRadius ?: -1}&submissionId=${submissionId ?: -1}&lineGeometry=$encodedLine"
+        }
     }
     object GPMap : Screen("gp_map/{formId}/{blockCode}") {
         fun createRoute(formId: Int, blockCode: String) =
@@ -253,6 +258,7 @@ fun AppNavigation() {
                 val authApi = remember {
                     RetrofitClient.getAuthenticatedApi(context, preferences)
                 }
+                val tnctApi = RetrofitClient.getTnctApi(context)
                 val geoApi = remember {
                     RetrofitClient.getGeoApi(context, preferences)
                 }
@@ -263,7 +269,9 @@ fun AppNavigation() {
                         database.offlineSubmissionDao(),
                         database.cachedFormDao(),
                         database.cachedFormDetailDao(),
-                        database.pendingFileUploadDao()
+                        database.pendingFileUploadDao(),
+                        tnctApi,
+                        database.cachedOptionSegmentDao()
                     )
                 }
                 val geoRepository = remember {
@@ -578,6 +586,11 @@ fun AppNavigation() {
                     navArgument("submissionId") {
                         type = NavType.IntType
                         defaultValue = -1
+                    },
+                            navArgument("lineGeometry") {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
                     }
                 )
             ) { backStackEntry ->
@@ -588,15 +601,20 @@ fun AppNavigation() {
                 val gpName = URLDecoder.decode(gpNameEncoded ?: "", "UTF-8")
                 val submissionIdArg = backStackEntry.arguments?.getInt("submissionId") ?: -1
                 val submissionId = if (submissionIdArg != -1) submissionIdArg else null
+                val lineGeometryEncoded = backStackEntry.arguments?.getString("lineGeometry")
+                val lineGeometry = URLDecoder.decode(lineGeometryEncoded ?: "", "UTF-8")
                 val database = AppDatabase.getDatabase(context)
                 val authApi = RetrofitClient.getAuthenticatedApi(context, preferences)
+                val tnctApi = RetrofitClient.getTnctApi(context)
                 val repository = FormRepository(
                     authApi, 
                     database.formDraftDao(), 
                     database.offlineSubmissionDao(),
                     database.cachedFormDao(),
                     database.cachedFormDetailDao(),
-                    database.pendingFileUploadDao()
+                    database.pendingFileUploadDao(),
+                    tnctApi,
+                    database.cachedOptionSegmentDao()
                 )
                 val viewModel: FormDataCollectionViewModel = viewModel(
                     factory = FormDataCollectionViewModelFactory(
@@ -607,7 +625,8 @@ fun AppNavigation() {
                         gpName,
                         dgpsManager,
                         submissionId,
-                        radius
+                        radius,
+                        lineGeometry
                     )
                 )
                 FormDataCollectionScreen(
@@ -642,6 +661,7 @@ fun AppNavigation() {
                 val blockCode = backStackEntry.arguments?.getString("blockCode")
 
                 val authApi = RetrofitClient.getAuthenticatedApi(context, preferences)
+                val tnctApi = RetrofitClient.getTnctApi(context)
                 val database = AppDatabase.getDatabase(context)
 
                 val repository = FormRepository(
@@ -650,7 +670,9 @@ fun AppNavigation() {
                     database.offlineSubmissionDao(),
                     database.cachedFormDao(),
                     database.cachedFormDetailDao(),
-                    database.pendingFileUploadDao()
+                    database.pendingFileUploadDao(),
+                    tnctApi,
+                    database.cachedOptionSegmentDao()
                 )
 
 
@@ -679,6 +701,18 @@ fun AppNavigation() {
 
                         navController.navigate(
                             Screen.FormDataCollection.createRoute(fId, bCode, encodedGpName,surveyRadius)
+                        )
+                    },
+                    onLineClick = { fId, bCode, geometry, surveyRadius ->
+
+                        navController.navigate(
+                            Screen.FormDataCollection.createRoute(
+                                formId = fId,
+                                blockCode = bCode,
+                                gpName = null,
+                                surveyRadius = surveyRadius,
+                                lineGeometry = geometry
+                            )
                         )
                     }
                 )
