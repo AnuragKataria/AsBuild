@@ -92,10 +92,19 @@ sealed class Screen(val route: String) {
             "gp_map/$formId/$blockCode"
     }
 
-    object FormMap : Screen("form_map/{type}/{fieldId}/{initialValue}?radius={radius}") {
-        fun createRoute(type: String, fieldId: String, initialValue: String, radius: Int?) =
-            "form_map/$type/$fieldId/${URLEncoder.encode(initialValue, "UTF-8")}?radius=${radius ?: -1}"
-    }
+    object FormMap : Screen("form_map/{type}/{fieldId}/{initialValue}?radius={radius}&refLine={refLine}") {
+        fun createRoute(type: String, fieldId: String, initialValue: String, radius: Int?, refLine: String? = null) : String {
+
+            val encodedLine = URLEncoder.encode(refLine ?: "", "UTF-8")
+
+                    return "form_map/$type/$fieldId/${
+                        URLEncoder.encode(
+                            initialValue,
+                            "UTF-8"
+                        )
+                    }?radius=${radius ?: -1}&refLine=$encodedLine"
+                }
+            }
 
     object DgpsSettings : Screen("dgps_settings")
     object DgpsRover : Screen("dgps_rover")
@@ -632,13 +641,14 @@ fun AppNavigation() {
                 FormDataCollectionScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
-                    onNavigateToMap = { type, fieldId, initialValue, radius ->
+                    onNavigateToMap = { type, fieldId, initialValue, radius, lineGeometry ->
                         navController.navigate(
                             Screen.FormMap.createRoute(
                                 type,
                                 fieldId,
                                 initialValue,
-                                radius
+                                radius,
+                                lineGeometry
                             )
                         )
                     },
@@ -724,18 +734,22 @@ fun AppNavigation() {
                     navArgument("type") { type = NavType.StringType },
                     navArgument("fieldId") { type = NavType.StringType },
                     navArgument("initialValue") { type = NavType.StringType },
-                    navArgument("radius") { type = NavType.IntType }
+                    navArgument("radius") { type = NavType.IntType },
+                    navArgument("refLine") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
                 val type = backStackEntry.arguments?.getString("type") ?: "Point"
                 val fieldId = backStackEntry.arguments?.getString("fieldId") ?: ""
                 val initialValue = URLDecoder.decode(backStackEntry.arguments?.getString("initialValue") ?: "", "UTF-8")
                 val radius = backStackEntry.arguments?.getInt("radius")
+                val reflineEncoded = backStackEntry.arguments?.getString("refLine")
+                val refline = URLDecoder.decode(reflineEncoded ?: "", "UTF-8")
 
                 FieldMapScreen(
                     type = type,
                     fieldId = fieldId,
                     initialValue = initialValue,
+                    refLine = refline,
                     onBack = { navController.popBackStack() },
                     onSave = { resultFieldId, resultValue ->
                         navController.previousBackStackEntry?.savedStateHandle?.set(

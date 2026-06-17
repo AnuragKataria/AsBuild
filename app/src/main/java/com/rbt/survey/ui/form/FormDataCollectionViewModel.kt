@@ -46,6 +46,10 @@ class FormDataCollectionViewModel(
     private val _uiState = MutableStateFlow<FormUiState>(FormUiState.Loading)
     val uiState: StateFlow<FormUiState> = _uiState
 
+    private val _referenceLineGeometry = MutableStateFlow<String?>(lineGeometry)
+
+    val referenceLineGeometry: StateFlow<String?> = _referenceLineGeometry
+
     val dgpsLocation = dgpsManager.location
     val dgpsStatus = dgpsManager.status
     val useDgps = preferences.useDgps
@@ -55,8 +59,8 @@ class FormDataCollectionViewModel(
 
     init {
         android.util.Log.d(
-            "FORM_NAV",
-            "GP=$selectedGpName Line=$lineGeometry"
+            "LINE_DEBUG",
+            "referenceLineGeometry = $lineGeometry"
         )
         fetchFormDetail()
         loadDrafts()
@@ -188,14 +192,6 @@ class FormDataCollectionViewModel(
                                 updateDependentMapFields("GP", selectedGpName, fields)
                             }
                         }
-                    }
-                    if (!lineGeometry.isNullOrBlank()) {
-
-                        android.util.Log.d(
-                            "LINE_FLOW",
-                            "Received Line Geometry"
-                        )
-
                     }
                 } else {
                     _uiState.value = FormUiState.Error(response.body()?.message ?: "Failed to load form details")

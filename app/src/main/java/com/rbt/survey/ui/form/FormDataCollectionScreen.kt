@@ -59,7 +59,7 @@ import androidx.lifecycle.viewModelScope
 fun FormDataCollectionScreen(
     viewModel: FormDataCollectionViewModel,
     onBack: () -> Unit,
-    onNavigateToMap: (String, String, String, Int?) -> Unit,
+    onNavigateToMap: (String, String, String, Int?, String?) -> Unit,
     navController: androidx.navigation.NavController,
     onSubmitSuccess: () -> Unit
 ) {
@@ -69,6 +69,7 @@ fun FormDataCollectionScreen(
     val dgpsLocation by viewModel.dgpsLocation.collectAsState()
     val dgpsStatus by viewModel.dgpsStatus.collectAsState()
     val useDgps by viewModel.useDgps.collectAsState(false)
+    val refLine by viewModel.referenceLineGeometry.collectAsState(false)
 
     val allDisplayFields = remember(uiState) {
         val successState = uiState as? FormUiState.Success ?: return@remember emptyList()
@@ -207,7 +208,7 @@ fun DynamicField(
     field: FormField,
     allFields: List<FormField>,
     viewModel: FormDataCollectionViewModel,
-    onNavigateToMap: (String, String, String, Int?) -> Unit,
+    onNavigateToMap: (String, String, String, Int?, String?) -> Unit,
     error: String? = null
 ) {
     val currentValue = viewModel.fieldValues[field.id]
@@ -459,7 +460,7 @@ fun DynamicField(
                         value = resolvedAddress,
                         onValueChange = {},
                         modifier = Modifier.fillMaxWidth().clickable {
-                            onNavigateToMap(mapType, field.id, currentValue?.toString() ?: "",viewModel.surveyRadius)
+                            onNavigateToMap(mapType, field.id, currentValue?.toString() ?: "",viewModel.surveyRadius,viewModel.referenceLineGeometry.value)
                         },
                         placeholder = { Text("Tap to select $mapType") },
                         shape = MaterialTheme.shapes.medium,
@@ -469,7 +470,7 @@ fun DynamicField(
                         supportingText = { if (error != null) Text(error) },
                         trailingIcon = {
                             IconButton(onClick = {
-                                onNavigateToMap(mapType, field.id, currentValue?.toString() ?: "",viewModel.surveyRadius)
+                                onNavigateToMap(mapType, field.id, currentValue?.toString() ?: "",viewModel.surveyRadius,viewModel.referenceLineGeometry.value)
                             }) {
                                 val icon = when(mapType) {
                                     "Polygon" -> Icons.Default.Polyline

@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -34,6 +35,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.rbt.survey.MyApplication
 import com.rbt.survey.R
+import com.rbt.survey.data.utils.bitmapDescriptorFromVector
 import com.rbt.survey.dgps.DgpsStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -43,6 +45,7 @@ fun MapScreen(
     fieldId: String,
     initialValue: String,
     radius: Int?,
+    refLine: String?,
     onBack: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
@@ -65,7 +68,8 @@ fun MapScreen(
     var loadingMessage by remember { mutableStateOf("Please Wait...") }
 
     var useCurrentLocationDirectly by remember { mutableStateOf(false) }
-
+    Log.d("MAP_DEBUG", "type=$type")
+    Log.d("MAP_DEBUG", "initialValue=$refLine")
     // Parse initial value
     val initialPoints = remember {
         try {
@@ -120,6 +124,9 @@ fun MapScreen(
     val hasExistingLocation = initialPoints.isNotEmpty()
 
     var points by remember { mutableStateOf(initialPoints) }
+    var referencePoints by remember {
+        mutableStateOf<List<LatLng>>(emptyList())
+    }
     var isTracking by remember { mutableStateOf(false) }
     var currentAccuracy by remember { mutableStateOf<Float?>(null) }
     var hasCenteredInitially by remember { mutableStateOf(false) }
@@ -175,6 +182,39 @@ fun MapScreen(
             }
         } else {
             onDispose {}
+        }
+    }
+
+    LaunchedEffect(refLine) {
+        if (!refLine.isNullOrBlank()) {
+            try {
+                val listType = object : TypeToken<List<LatLng>>() {}.type
+
+                referencePoints =
+                    gson.fromJson<List<LatLng>>(refLine, listType)
+                        ?: emptyList()
+
+                if (referencePoints.isNotEmpty()) {
+
+                    val boundsBuilder = com.google.android.gms.maps.model.LatLngBounds.Builder()
+
+                    referencePoints.forEach {
+                        boundsBuilder.include(it)
+                    }
+
+                    val bounds = boundsBuilder.build()
+
+                    cameraPositionState.animate(
+                        CameraUpdateFactory.newLatLngBounds(
+                            bounds,
+                            150 // padding
+                        )
+                    )
+                }
+
+            } catch (e: Exception) {
+                Log.e("MAP_DEBUG", "RefLine parse error", e)
+            }
         }
     }
 
@@ -384,6 +424,46 @@ fun MapScreen(
                         )
                     }
                 } else if (type.lowercase().contains("polyline")) {
+
+                    // Reference line
+                    if (referencePoints.size >= 2) {
+                        Polyline(
+                            points = referencePoints,
+                            color = Color.Gray,
+                            width = 8f
+                        )
+
+                        // Draw direction arrows
+//                        for (i in 0 until referencePoints.size - 1) {
+//
+//                            val start = referencePoints[i]
+//                            val end = referencePoints[i + 1]
+//
+//                            val mid = LatLng(
+//                                (start.latitude + end.latitude) / 2,
+//                                (start.longitude + end.longitude) / 2
+//                            )
+//
+//                            val rotation = bearingBetween(start, end).toFloat()
+//
+//                            Marker(
+//                                state = MarkerState(position = mid),
+//                                icon = bitmapDescriptorFromVector(
+//                                    context,
+//                                    R.drawable.ic_arrow
+//                                ),
+//                                anchor = Offset(0.5f, 0.5f),
+//
+//                                // ⭐ IMPORTANT: keeps it stable on map
+//                                flat = true,
+//
+//                                // direction
+//                                rotation = rotation
+//                            )
+//                        }
+                    }
+
+                    // User line
                     points.forEach { point -> Marker(state = MarkerState(position = point)) }
                     if (points.size >= 2) {
                         Polyline(
@@ -790,4 +870,20 @@ private fun distanceBetween(p1: LatLng, p2: LatLng): Float {
     val results = FloatArray(1)
     android.location.Location.distanceBetween(p1.latitude, p1.longitude, p2.latitude, p2.longitude, results)
     return results[0]
+}
+
+private fun bearingBetween(start: LatLng, end: LatLng): Double {
+    val lat1 = Math.toRadians(start.latitude)
+    val lon1 = Math.toRadians(start.longitude)
+    val lat2 = Math.toRadians(end.latitude)
+    val lon2 = Math.toRadians(end.longitude)
+
+    val dLon = lon2 - lon1
+
+    val y = Math.sin(dLon) * Math.cos(lat2)
+    val x = Math.cos(lat1) * Math.sin(lat2) -
+            Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
+
+    val brng = Math.toDegrees(Math.atan2(y, x))
+    return (brng + 360) % 360
 }
