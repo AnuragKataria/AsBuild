@@ -341,7 +341,7 @@ class SurveyDashboardViewModel(
 
                 // Option Segment cache download
                 if (formId == 11) {
-                    repository.getOptionSegments("714")
+                    repository.getOptionSegments(blockCode)
                 }
 
                 // Done

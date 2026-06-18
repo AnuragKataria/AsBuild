@@ -63,7 +63,7 @@ class MapViewModel(
 
                     _lineList.value =
                         repository.getOptionSegments(
-                            "714"
+                            blockCode ?: ""
                         )
 
                     _isLoading.value = false
