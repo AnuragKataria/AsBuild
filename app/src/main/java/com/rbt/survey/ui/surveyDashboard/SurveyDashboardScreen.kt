@@ -39,7 +39,8 @@ fun SurveyDashboardScreen(
     onNavigateToMap: (Int, String?) -> Unit,
     onNavigateToEditOfflineSubmission: (Int, Int, String?, String?, Int?) -> Unit,
     onLogout: () -> Unit,
-    onNavigateToDgpsSettings: () -> Unit
+    onNavigateToDgpsSettings: () -> Unit,
+    onBackClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val blockSummaries by viewModel.blockSummaries.collectAsState()
@@ -88,6 +89,14 @@ fun SurveyDashboardScreen(
                 // 🔹 TOP BAR
                 CenterAlignedTopAppBar(
                     title = { Text("Survey Dashboard", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                Icons.Default.ArrowBack,
+                                contentDescription = null
+                            )
+                        }
+                    },
                     actions = {
                         IconButton(onClick = { viewModel.fetchForms() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh")

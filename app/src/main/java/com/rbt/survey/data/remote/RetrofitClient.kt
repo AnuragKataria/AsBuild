@@ -104,4 +104,14 @@ object RetrofitClient {
             .build()
             .create(TnctApi::class.java)
     }
+
+    fun getAssetApi(context: Context, preferences: UserPreferences): AssetApi {
+
+        return Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .client(getUnsafeOkHttpClient(context, preferences))
+            .build()
+            .create(AssetApi::class.java)
+    }
 }

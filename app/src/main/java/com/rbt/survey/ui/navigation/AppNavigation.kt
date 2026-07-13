@@ -2,80 +2,56 @@ package com.rbt.survey.ui.navigation
 
 import android.content.Intent
 import android.os.Build
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.ui.Alignment
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.ui.*
+import androidx.compose.runtime.*
 import kotlinx.coroutines.flow.first
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.rbt.survey.MyApplication
 import com.rbt.survey.data.local.UserPreferences
 import com.rbt.survey.data.local.db.AppDatabase
 import com.rbt.survey.dgps.DgpsManager
 import com.rbt.survey.data.remote.RetrofitClient
-import com.rbt.survey.data.repository.AuthRepository
-import com.rbt.survey.data.repository.FormRepository
-import com.rbt.survey.data.repository.GeoRepository
-import com.rbt.survey.ui.form.FormDataCollectionScreen
-import com.rbt.survey.ui.form.FormDataCollectionViewModel
-import com.rbt.survey.ui.form.FormDataCollectionViewModelFactory
-import com.rbt.survey.ui.surveyDashboard.SurveyDashboardScreen
-import com.rbt.survey.ui.surveyDashboard.SurveyDashboardViewModel
-import com.rbt.survey.ui.surveyDashboard.SurveyDashboardViewModelFactory
-import com.rbt.survey.ui.login.LoginScreen
-import com.rbt.survey.ui.login.LoginViewModel
+import com.rbt.survey.data.repository.*
+import com.rbt.survey.ui.form.*
+import com.rbt.survey.ui.surveyDashboard.*
+import com.rbt.survey.ui.login.*
+import com.rbt.survey.ui.inventory.InventoryScreen
 import com.rbt.survey.ui.login.LoginViewModelFactory
 import com.rbt.survey.ui.map.MapScreen as GpMapScreen
 import com.rbt.survey.ui.form.MapScreen as FieldMapScreen
 import com.rbt.survey.ui.map.MapViewModel
 import com.rbt.survey.ui.map.MapViewModelFactory
-import com.rbt.survey.ui.dgps.DgpsViewModel
-import com.rbt.survey.ui.dgps.DgpsViewModelFactory
-import com.rbt.survey.ui.dgps.BluetoothDeviceListScreen
-import com.rbt.survey.ui.dgps.BaseModeSettingsScreen
-import com.rbt.survey.ui.dgps.DeviceInformationScreen
+import com.rbt.survey.ui.dgps.*
 //import com.rbt.survey.ui.dgps.DeviceSelfCheckScreen
-import com.rbt.survey.ui.dgps.DeviceSettingsScreen
-import com.rbt.survey.ui.dgps.DgpsHomeScreen
-import com.rbt.survey.ui.dgps.GnssSystemScreen
-import com.rbt.survey.ui.dgps.InspectionAccuracyScreen
-import com.rbt.survey.ui.dgps.NmeaSettingsScreen
-import com.rbt.survey.ui.dgps.PoleCalibrationScreen
-import com.rbt.survey.ui.dgps.PositionInformationScreen
-import com.rbt.survey.ui.dgps.RoverModeSettingsScreen
-import com.rbt.survey.ui.dgps.StaticSurveySettingsScreen
 import com.rbt.survey.ui.splash.SplashScreen
-import java.net.URLDecoder
-import java.net.URLEncoder
+import java.net.*
 
 import androidx.work.*
+import com.rbt.survey.data.repository.AssetRepository
 import com.rbt.survey.location.LocationService
+import com.rbt.survey.ui.assetManagement.*
 import com.rbt.survey.ui.dashboard.DashboardScreen
-import com.rbt.survey.ui.locationTrackingDashboard.LocationTrackingScreen
-import com.rbt.survey.ui.locationTrackingDashboard.LocationTrackingViewModel
-import com.rbt.survey.ui.locationTrackingDashboard.LocationTrackingViewModelFactory
+import com.rbt.survey.ui.locationTrackingDashboard.*
 import com.rbt.survey.worker.SyncWorker
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import java.util.concurrent.TimeUnit
 
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Login : Screen("login")
     object SurveyDashboard  : Screen("survey_dashboard")
+    object Inventory  : Screen("inventory")
+    object AssetManagement  : Screen("asset_management")
+    object AssetDetail : Screen("asset_detail/{assetTypeId}") {
+        fun createRoute(assetTypeId: Int) =
+            "asset_detail/$assetTypeId"
+    }
     object Dashboard : Screen("dashboard")
 
     object LocationTracking : Screen("location_tracking")
@@ -233,7 +209,7 @@ fun AppNavigation() {
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
                     onInventoryClick = {
-                        // TODO: navigate when ready
+                        navController.navigate(Screen.Inventory.route)
                     },
                     onSurveyClick = {
                         navController.navigate(Screen.SurveyDashboard.route)
@@ -259,6 +235,75 @@ fun AppNavigation() {
                     onNavigateToDgpsSettings = {
                         navController.navigate(Screen.DgpsSettings.route)
                     }
+                )
+            }
+            composable(Screen.Inventory.route) {
+                InventoryScreen(
+                    onAssetManagementClick = {
+                        navController.navigate(Screen.AssetManagement.route)
+                    },
+                    onAddAssetsToProjectClick = {
+                        // navigate to add assets screen
+                    },
+                    onBackClick = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(Screen.AssetManagement.route) {
+
+                val assetApi = remember {
+                    RetrofitClient.getAssetApi(context, preferences)
+                }
+                val assetRepository = remember {
+                    AssetRepository(assetApi)
+                }
+                val viewModel: AssetManagementViewModel = viewModel(
+                    factory = AssetManagementViewModelFactory(assetRepository)
+                )
+
+                AssetManagementScreen(
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    onAssetClick = { assetTypeId ->
+
+                        navController.navigate(
+                            Screen.AssetDetail.createRoute(
+                                assetTypeId
+                            )
+                        )
+                    },
+                    viewModel = viewModel
+                )
+            }
+
+            composable(
+                Screen.AssetDetail.route
+            ) { backStackEntry ->
+
+                val assetTypeId =
+                    backStackEntry.arguments
+                        ?.getString("assetTypeId")
+                        ?.toInt() ?: 0
+
+                val assetApi = remember {
+                    RetrofitClient.getAssetApi(context, preferences)
+                }
+                val assetRepository = remember {
+                    AssetRepository(assetApi)
+                }
+                val viewModel: AssetDetailViewModel = viewModel(
+                    factory = AssetDetailViewModelFactory(assetRepository)
+                )
+
+                AssetDetailScreen(
+                    assetTypeId = assetTypeId,
+                    onBackClick = {
+                        navController.popBackStack()
+                    },
+                    viewModel = viewModel
                 )
             }
 
@@ -327,6 +372,9 @@ fun AppNavigation() {
                     },
                     onNavigateToDgpsSettings = {
                         navController.navigate(Screen.DgpsSettings.route)
+                    },
+                    onBackClick = {
+                        navController.popBackStack()
                     }
                 )
             }
