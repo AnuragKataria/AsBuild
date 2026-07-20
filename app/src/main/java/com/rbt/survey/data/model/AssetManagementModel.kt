@@ -1,6 +1,28 @@
 package com.rbt.survey.data.model
 
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+
+
+data class ProjectResponse(
+    val projectId: Int,
+    val projectCode: String,
+    val projectName: String,
+    val isActive: Boolean
+)
+
+data class ConnectivityRuleResponse(
+    val ruleId: Int,
+    val tenantId: Int,
+    val parentAssetTypeId: Int,
+    val parentAssetTypeCode: String?,
+    val parentAssetTypeName: String?,
+    val childAssetTypeId: Int,
+    val childAssetTypeCode: String?,
+    val childAssetTypeName: String?,
+    val relationshipType: String?,
+    val isBidirectional: Boolean
+)
 
 data class AssetTypeResponse(
     val assetCode: String,
@@ -185,4 +207,115 @@ data class SaveLayout(
 data class SaveSection(
     val title: String,
     val fields: List<String>
+)
+
+
+data class CreateAddAssetRequest(
+    val projectId: Int,
+    val regionId: Int,
+    val assetTypeId: Int,
+    val assetCode: String,
+    val assetName: String,
+    val description: String,
+    val status: String,
+    val installedOn: String?,
+    val ParentAssetId: Int?,
+    val fields: List<Any>,
+    val dynamicFields: DynamicFieldsRequest,
+    val geometry: GeometryRequest
+)
+
+data class GeometryRequest(
+    val wkt: String,
+    val srid: Int = 4326
+)
+
+data class DynamicFieldsRequest(
+    val data: Map<String, Any?>,
+    val dropdownSnapshot: Map<String, DropdownSnapshot>,
+    val uploadedFileIds: List<Int> = emptyList(),
+    val uploadedFiles: List<Any> = emptyList(),
+    val updatedBy: String = "admin",
+    val attemptedUploadCount: Int = 0,
+    val successfulUploadCount: Int = 0
+)
+
+data class DropdownSnapshot(
+    val value: String,
+    val label: String
+)
+
+data class UpdateDynamicFieldsRequest(
+    val data: Map<String, Any?>,
+    val dropdownSnapshot: Map<String, DropdownSnapshot>,
+    val uploadedFileIds: List<Int> = emptyList(),
+    val uploadedFiles: List<Any> = emptyList(),
+    val updatedBy: String = "admin",
+    val attemptedUploadCount: Int = 0,
+    val successfulUploadCount: Int = 0,
+    val useCurrentVersion: Boolean = false
+)
+
+data class CreatedAssetsResponse(
+    val success: Boolean,
+    val message: String?,
+    val data: List<CreatedAssetData>,
+    val errors: Any?
+)
+data class CreatedAssetData(
+    val assetDynamicFieldValueId: Int,
+    val assetId: Int,
+    val projectId: Int,
+    val assetTypeId: Int,
+    val assetCode: String,
+    val configVersionId: Int,
+    val configVersionNo: Int,
+    val data: Map<String, JsonElement>?,
+    val dropdownSnapshot: JsonElement?,
+    val createdOn: String?,
+    val updatedOn: String?,
+    val createdBy: String?,
+    val updatedBy: String?,
+    val files: List<AssetFile>?,
+    val asset: CreatedAsset?,
+    val assetGeometry: AssetGeometry?,
+    val parentAssetId: Int?
+)
+data class createdDropdownSnapshot(
+    val label: String?,
+    val value: String?
+)
+data class AssetFile(
+    val fileId: Int?,
+    val assetId: Int?,
+    val fieldId: String?,
+    val originalFileName: String?,
+    val storedFileName: String?,
+    val relativePath: String?,
+    val contentType: String?,
+    val fileSize: Long?,
+    val createdOn: String?,
+    val uploadedBy: String?
+)
+data class CreatedAsset(
+    val assetId: Int,
+    val tenantId: Int,
+    val projectId: Int,
+    val regionId: Int?,
+    val assetTypeId: Int,
+    val assetCode: String?,
+    val assetName: String?,
+    val status: String?,
+    val installedOn: String?,
+    val retiredOn: String?,
+    val createdOn: String?,
+    val updatedOn: String?,
+    val isDeleted: Boolean,
+    val parentAssetId: Int?,
+    val description: String?
+)
+data class AssetGeometry(
+    val assetId: Int,
+    val wkt: String?,
+    val srid: Int?
 )

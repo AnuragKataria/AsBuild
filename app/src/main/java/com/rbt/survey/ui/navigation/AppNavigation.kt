@@ -35,8 +35,10 @@ import java.net.*
 import androidx.work.*
 import com.rbt.survey.data.repository.AssetRepository
 import com.rbt.survey.location.LocationService
-import com.rbt.survey.ui.assetManagement.*
 import com.rbt.survey.ui.dashboard.DashboardScreen
+import com.rbt.survey.ui.inventory.InventoryMapScreen
+import com.rbt.survey.ui.inventory.InventoryMapViewModel
+import com.rbt.survey.ui.inventory.InventoryMapViewModelFactory
 import com.rbt.survey.ui.locationTrackingDashboard.*
 import com.rbt.survey.worker.SyncWorker
 import kotlinx.coroutines.*
@@ -46,12 +48,18 @@ sealed class Screen(val route: String) {
     object Splash : Screen("splash")
     object Login : Screen("login")
     object SurveyDashboard  : Screen("survey_dashboard")
-    object Inventory  : Screen("inventory")
-    object AssetManagement  : Screen("asset_management")
-    object AssetDetail : Screen("asset_detail/{assetTypeId}") {
-        fun createRoute(assetTypeId: Int) =
-            "asset_detail/$assetTypeId"
-    }
+    object InventoryMap  : Screen("inventory_map")
+//    object Inventory  : Screen("inventory")
+//    object AssetManagement  : Screen("asset_management")
+//    object AssetAddProject  : Screen("asset_add_project")
+//    object ViewEditAsset  : Screen("view_edit_asset") {
+//        fun createRoute(assetTypeId: Int) =
+//            "asset_detail/$assetTypeId"
+//    }
+//    object AssetDetail : Screen("asset_detail/{assetTypeId}") {
+//        fun createRoute(assetTypeId: Int) =
+//            "asset_detail/$assetTypeId"
+//    }
     object Dashboard : Screen("dashboard")
 
     object LocationTracking : Screen("location_tracking")
@@ -209,7 +217,8 @@ fun AppNavigation() {
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
                     onInventoryClick = {
-                        navController.navigate(Screen.Inventory.route)
+//                        navController.navigate(Screen.Inventory.route)
+                        navController.navigate(Screen.InventoryMap.route)
                     },
                     onSurveyClick = {
                         navController.navigate(Screen.SurveyDashboard.route)
@@ -237,21 +246,8 @@ fun AppNavigation() {
                     }
                 )
             }
-            composable(Screen.Inventory.route) {
-                InventoryScreen(
-                    onAssetManagementClick = {
-                        navController.navigate(Screen.AssetManagement.route)
-                    },
-                    onAddAssetsToProjectClick = {
-                        // navigate to add assets screen
-                    },
-                    onBackClick = {
-                        navController.popBackStack()
-                    }
-                )
-            }
 
-            composable(Screen.AssetManagement.route) {
+            composable(Screen.InventoryMap.route) {
 
                 val assetApi = remember {
                     RetrofitClient.getAssetApi(context, preferences)
@@ -259,53 +255,117 @@ fun AppNavigation() {
                 val assetRepository = remember {
                     AssetRepository(assetApi)
                 }
-                val viewModel: AssetManagementViewModel = viewModel(
-                    factory = AssetManagementViewModelFactory(assetRepository)
+                val viewModel: InventoryMapViewModel = viewModel(
+                    factory = InventoryMapViewModelFactory(assetRepository)
                 )
 
-                AssetManagementScreen(
+                InventoryMapScreen(
                     onBackClick = {
                         navController.popBackStack()
                     },
-                    onAssetClick = { assetTypeId ->
-
-                        navController.navigate(
-                            Screen.AssetDetail.createRoute(
-                                assetTypeId
-                            )
-                        )
-                    },
-                    viewModel = viewModel
+                    viewModel = viewModel,
                 )
             }
 
-            composable(
-                Screen.AssetDetail.route
-            ) { backStackEntry ->
-
-                val assetTypeId =
-                    backStackEntry.arguments
-                        ?.getString("assetTypeId")
-                        ?.toInt() ?: 0
-
-                val assetApi = remember {
-                    RetrofitClient.getAssetApi(context, preferences)
-                }
-                val assetRepository = remember {
-                    AssetRepository(assetApi)
-                }
-                val viewModel: AssetDetailViewModel = viewModel(
-                    factory = AssetDetailViewModelFactory(assetRepository)
-                )
-
-                AssetDetailScreen(
-                    assetTypeId = assetTypeId,
-                    onBackClick = {
-                        navController.popBackStack()
-                    },
-                    viewModel = viewModel
-                )
-            }
+//            composable(Screen.Inventory.route) {
+//                InventoryScreen(
+//                    onAssetManagementClick = {
+//                        navController.navigate(Screen.AssetManagement.route)
+//                    },
+//                    onAddAssetsToProjectClick = {
+//                        navController.navigate(Screen.AssetAddProject.route)
+//                    },
+//                    onBackClick = {
+//                        navController.popBackStack()
+//                    }
+//                )
+//            }
+//
+//            composable(Screen.AssetManagement.route) {
+//
+//                val assetApi = remember {
+//                    RetrofitClient.getAssetApi(context, preferences)
+//                }
+//                val assetRepository = remember {
+//                    AssetRepository(assetApi)
+//                }
+//                val viewModel: AssetManagementViewModel = viewModel(
+//                    factory = AssetManagementViewModelFactory(assetRepository)
+//                )
+//
+//                AssetManagementScreen(
+//                    onBackClick = {
+//                        navController.popBackStack()
+//                    },
+//                    onAssetClick = { assetTypeId ->
+//
+//                        navController.navigate(
+//                            Screen.AssetDetail.createRoute(
+//                                assetTypeId
+//                            )
+//                        )
+//                    },
+//                    viewModel = viewModel
+//                )
+//            }
+//
+//            composable(
+//                Screen.AssetDetail.route
+//            ) { backStackEntry ->
+//
+//                val assetTypeId =
+//                    backStackEntry.arguments
+//                        ?.getString("assetTypeId")
+//                        ?.toInt() ?: 0
+//
+//                val assetApi = remember {
+//                    RetrofitClient.getAssetApi(context, preferences)
+//                }
+//                val assetRepository = remember {
+//                    AssetRepository(assetApi)
+//                }
+//                val viewModel: AssetDetailViewModel = viewModel(
+//                    factory = AssetDetailViewModelFactory(assetRepository)
+//                )
+//
+//                AssetDetailScreen(
+//                    assetTypeId = assetTypeId,
+//                    onBackClick = {
+//                        navController.popBackStack()
+//                    },
+//                    viewModel = viewModel
+//                )
+//            }
+//
+//            composable(Screen.AssetAddProject.route) {
+//
+//                val assetApi = remember {
+//                    RetrofitClient.getAssetApi(context, preferences)
+//                }
+//                val assetRepository = remember {
+//                    AssetRepository(assetApi)
+//                }
+//                val viewModel: AssetAddProjectViewModel = viewModel(
+//                    factory = AssetAddProjectViewModelFactory(assetRepository)
+//                )
+//
+//                AssetAddProjectScreen(
+//                    onBackClick = {
+//                        navController.popBackStack()
+//                    },
+//                    viewModel = viewModel,
+////                    onvieweditassetClick = {
+////                        navController.navigate(
+////                            Screen.ViewEditAsset.createRoute(
+////                                assetTypeId
+////                            )
+////                        )
+////                    },
+//                    onaddassetClick = {
+//                        navController.popBackStack()
+//                    },
+//                )
+//            }
 
             composable(Screen.SurveyDashboard.route) {
                 val database = AppDatabase.getDatabase(context)

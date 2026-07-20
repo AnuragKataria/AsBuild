@@ -67,6 +67,7 @@ dependencies {
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.compose.foundation)
     debugImplementation(libs.chucker.debug)
     releaseImplementation(libs.chucker.release)
     ksp(libs.androidx.room.compiler)

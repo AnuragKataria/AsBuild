@@ -83,8 +83,8 @@ class LocationService : Service() {
                     Log.e("LocationService", "Error: ${e.message}")
                 }
 
-                delay(60000) // every 60 seconds
-//                delay(300000) // every 60 seconds
+//                delay(60000) // every 60 seconds
+                delay(300000) // every 300 seconds
             }
         }
     }
