@@ -80,6 +80,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.text.style.TextAlign
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import androidx.compose.ui.window.Dialog
+import coil.ImageLoader
+import com.rbt.survey.data.remote.RetrofitClient
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -89,16 +91,17 @@ fun InventoryMapScreen(
 ) {
 
     val context = LocalContext.current
-    val base_URL = "https://webgis.rbt-ltd.com/api"
+    val base_URL = "https://webgis.rbt-ltd.com"
     val cameraPositionState = rememberCameraPositionState()
+    val imageLoader = remember { ImageLoader.Builder(context).okHttpClient(RetrofitClient.getBasicUnsafeOkHttpClient(context)).build() }
 
     val projects by viewModel.projects.collectAsState()
     val connectivityRules by viewModel.connectivityRules.collectAsState()
     val createdAssets by viewModel.createdAssets.collectAsState()
+    val allassetDetails by viewModel.allassetDetails.collectAsState()
     val assetDetails by viewModel.assetDetails.collectAsState()
     val assetConfig by viewModel.assetConfig.collectAsState()
     val saveMessage by viewModel.saveMessage.collectAsState()
-    val canvasFields by viewModel.canvasFields.collectAsState()
 
     var selectedProject by remember { mutableStateOf<ProjectResponse?>(null) }
     var selectedAsset by remember { mutableStateOf<AssetDetailResponse?>(null) }
@@ -129,6 +132,7 @@ fun InventoryMapScreen(
     var assetCode by remember { mutableStateOf("") }
     var assetCategory by remember { mutableStateOf("") }
     var geometryType by remember { mutableStateOf("") }
+    var imageurl by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("") }
     var fieldcount by remember { mutableStateOf(0) }
     var assetDescription by remember { mutableStateOf("") }
@@ -160,6 +164,7 @@ fun InventoryMapScreen(
         assetCode = ""
         assetCategory = ""
         geometryType = ""
+        imageurl = ""
         status = ""
         assetDescription = ""
         installDate = ""
@@ -182,12 +187,17 @@ fun InventoryMapScreen(
         fieldcount = assetConfig?.data?.currentVersion?.schema?.fields?.size ?: 0
     }
 
+    LaunchedEffect(assetDetails) {
+        imageurl = base_URL + assetDetails?.data?.imageUrl.toString()
+    }
+
     LaunchedEffect(selectedAsset) {
         selectedAsset?.data?.let { asset ->
             assetName = asset.assetName
             assetCode = asset.assetCode
             assetCategory = asset.assetCategory
             geometryType = asset.geometryType
+            imageurl = base_URL + asset.imageUrl.toString()
             status = if (asset.isActive) "Active" else "Deactive"
         }
     }
@@ -456,6 +466,7 @@ fun InventoryMapScreen(
                             ),
                             icon = BitmapDescriptorFactory.fromBitmap(bitmap),
                             onClick = {
+                                viewModel.loadAssetDetails(asset.assetTypeId)
                                 selectedMarkerAsset = asset
                                 markerAssetDialog = true
                                 true
@@ -471,6 +482,7 @@ fun InventoryMapScreen(
                             color = Color.Blue,
                             clickable = true,
                             onClick = {
+                                viewModel.loadAssetDetails(asset.assetTypeId)
                                 selectedMarkerAsset = asset
                                 markerAssetDialog = true
                             }
@@ -577,8 +589,10 @@ fun InventoryMapScreen(
                                         assetCode,
                                         assetCategory,
                                         geometryType,
+                                        imageurl,
                                         fieldcount,
-                                        status
+                                        status,
+                                        imageLoader
                                     )
 
                                     AssetStepper(currentStep = currentStep)
@@ -886,7 +900,7 @@ fun InventoryMapScreen(
                                 modifier = Modifier.fillMaxSize()
                             ) {
 
-                                items(assetDetails) { asset ->
+                                items(allassetDetails) { asset ->
 
                                     Column(
                                         modifier = Modifier
@@ -924,10 +938,16 @@ fun InventoryMapScreen(
                                     ) {
 
                                         AsyncImage(
-                                            model =
-                                                base_URL + (asset.data.imageUrl ?: ""),
+                                            model = base_URL + (asset.data.imageUrl ?: ""),
+                                            imageLoader = imageLoader,
                                             contentDescription = null,
-                                            modifier = Modifier.size(70.dp)
+                                            modifier = Modifier.size(70.dp),
+                                            onSuccess = {
+                                                Log.d("IMAGE", "Loaded")
+                                            },
+                                            onError = {
+                                                Log.e("IMAGE", "Failed", it.result.throwable)
+                                            }
                                         )
 
                                         Spacer(
@@ -969,6 +989,8 @@ fun InventoryMapScreen(
 
             AssetDetailsDialog(
                 asset = selectedMarkerAsset!!,
+                imageurl = imageurl,
+                imageLoader = imageLoader,
                 onClose = {
                     markerAssetDialog = false
                 },
@@ -1015,6 +1037,8 @@ fun InventoryMapScreen(
 @Composable
 fun AssetDetailsDialog(
     asset: CreatedAssetData,
+    imageurl: String,
+    imageLoader: ImageLoader,
     onClose: () -> Unit,
     onExpPdf: () -> Unit,
     onModify: () -> Unit
@@ -1048,11 +1072,20 @@ fun AssetDetailsDialog(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(
-                                    Color(0xFFE8F5E9),
-                                    CircleShape
-                                )
-                        )
+                        ){
+                            AsyncImage(
+                                model = imageurl,
+                                imageLoader = imageLoader,
+                                contentDescription = null,
+                                modifier = Modifier.size(70.dp),
+                                onSuccess = {
+                                    Log.d("IMAGE", "Loaded")
+                                },
+                                onError = {
+                                    Log.e("IMAGE", "Failed", it.result.throwable)
+                                }
+                            )
+                        }
 
                         Spacer(modifier = Modifier.width(12.dp))
 
@@ -1349,8 +1382,10 @@ private fun AssetHeader(
     assetCode: String,
     assetCategory: String,
     geometryType: String,
+    imageurl: String,
     fieldcount: Int,
     status: String,
+    imageLoader : ImageLoader
 ) {
 
     Column(
@@ -1364,11 +1399,20 @@ private fun AssetHeader(
             Box(
                 modifier = Modifier
                     .size(32.dp)
-                    .background(
-                        Color(0xFFE8F5E9),
-                        CircleShape
-                    )
-            )
+            ){
+                AsyncImage(
+                    model = imageurl,
+                    imageLoader = imageLoader,
+                    contentDescription = null,
+                    modifier = Modifier.size(70.dp),
+                    onSuccess = {
+                        Log.d("IMAGE", "Loaded")
+                    },
+                    onError = {
+                        Log.e("IMAGE", "Failed", it.result.throwable)
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -1383,6 +1427,7 @@ private fun AssetHeader(
                 Text(
                     assetName,
                     fontWeight = FontWeight.Bold,
+                    color = Color.Black,
                     fontSize = 16.sp
                 )
 
@@ -1403,22 +1448,22 @@ private fun AssetHeader(
 
             AssistChip(
                 onClick = {},
-                label = { Text(assetCategory,fontSize = 10.sp) }
+                label = { Text(assetCategory,fontSize = 10.sp,color = Color.Black) }
             )
 
             AssistChip(
                 onClick = {},
-                label = { Text(geometryType,fontSize = 10.sp) }
+                label = { Text(geometryType,fontSize = 10.sp,color = Color.Black) }
             )
 
             AssistChip(
                 onClick = {},
-                label = { Text(status,fontSize = 10.sp) }
+                label = { Text(status,fontSize = 10.sp,color = Color.Black) }
             )
 
             AssistChip(
                 onClick = {},
-                label = { Text("$fieldcount Fields",fontSize = 10.sp) }
+                label = { Text("$fieldcount Fields",fontSize = 10.sp,color = Color.Black) }
             )
         }
     }

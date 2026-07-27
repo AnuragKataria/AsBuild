@@ -36,16 +36,15 @@ class InventoryMapViewModel(
     private val _createdAssets = MutableStateFlow<List<CreatedAssetData>>(emptyList())
     val createdAssets = _createdAssets.asStateFlow()
 
-    private val _assetDetails = MutableStateFlow<List<AssetDetailResponse>>(emptyList())
-    val assetDetails: StateFlow<List<AssetDetailResponse>> = _assetDetails
+    private val _allassetDetails = MutableStateFlow<List<AssetDetailResponse>>(emptyList())
+    val allassetDetails: StateFlow<List<AssetDetailResponse>> = _allassetDetails
+
+    private val _assetDetails = MutableStateFlow<AssetDetailResponse?>(null)
+    val assetDetails: StateFlow<AssetDetailResponse?> = _assetDetails
 
     private val _assetConfig = MutableStateFlow<AssetConfigResponse?>(null)
 
     val assetConfig = _assetConfig.asStateFlow()
-
-    private val _canvasFields = MutableStateFlow<List<DynamicField>>(emptyList())
-
-    val canvasFields = _canvasFields.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -109,6 +108,25 @@ class InventoryMapViewModel(
                     }
                 }
 
+                _allassetDetails.value = details
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isAssetLoading.value = false
+            }
+        }
+    }
+
+    fun loadAssetDetails(assetTypeId: Int) {
+
+        viewModelScope.launch {
+            try {
+                _isAssetLoading.value = true
+                _isLoadingmessage.value = "Loading Assets..."
+
+                val details = repository.getAssetDetail(assetTypeId)
+
                 _assetDetails.value = details
 
             } catch (e: Exception) {
@@ -140,15 +158,10 @@ class InventoryMapViewModel(
 
                     _assetConfig.value = assetConfig
 
-                    assetConfig?.data?.currentVersion?.schema?.fields?.let {
-                        _canvasFields.value = it
-                    }
-
                 } else if (assetConfigResponse.code() == 404) {
 
                     // No configuration exists yet
                     _assetConfig.value = null
-                    _canvasFields.value = emptyList()
 
                 } else {
 

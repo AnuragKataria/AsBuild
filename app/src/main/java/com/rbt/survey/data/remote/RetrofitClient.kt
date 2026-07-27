@@ -60,7 +60,7 @@ object RetrofitClient {
             .create(AuthApi::class.java)
     }
 
-    private fun getBasicUnsafeOkHttpClient(context: Context): OkHttpClient {
+    fun getBasicUnsafeOkHttpClient(context: Context): OkHttpClient {
         val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
