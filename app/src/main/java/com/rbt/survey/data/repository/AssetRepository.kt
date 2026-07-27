@@ -153,4 +153,8 @@ class AssetRepository (
             body
         )
     }
+
+    suspend fun exportPdf(
+        assetId: Int
+    ) = apiService.exportPdf(assetId)
 }

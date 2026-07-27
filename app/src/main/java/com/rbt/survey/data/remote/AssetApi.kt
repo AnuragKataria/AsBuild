@@ -101,4 +101,10 @@ interface AssetApi {
         @Path("projectId") projectId: Int,
         @Body body: JsonObject
     ): CreatedAssetsResponse
+
+    @GET("/api/route-trace/{assetId}/report.pdf")
+    @Streaming
+    suspend fun exportPdf(
+        @Path("assetId") assetId: Int
+    ): Response<ResponseBody>
 }

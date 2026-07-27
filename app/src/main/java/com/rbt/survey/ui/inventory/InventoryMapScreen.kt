@@ -24,6 +24,12 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
 import android.Manifest
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.Typeface
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -68,8 +74,10 @@ import com.google.maps.android.compose.Polyline
 import com.rbt.survey.data.model.*
 import kotlin.text.clear
 import android.util.Log
+import android.util.TypedValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.text.style.TextAlign
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import androidx.compose.ui.window.Dialog
 
@@ -95,6 +103,9 @@ fun InventoryMapScreen(
     var selectedProject by remember { mutableStateOf<ProjectResponse?>(null) }
     var selectedAsset by remember { mutableStateOf<AssetDetailResponse?>(null) }
     var parentAssetTypeId by remember { mutableStateOf<Int?>(null) }
+    var isFilterExpanded by remember {
+        mutableStateOf(false)
+    }
 
     var isSidePanelOpen by remember { mutableStateOf(false) }
 
@@ -313,500 +324,531 @@ fun InventoryMapScreen(
                 }
             )
         },
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Button(
-                    onClick = {
-                        showAssetDialog = true
-                        viewModel.loadAssets()
-                    },
-                    enabled = isAddAssetEnabled,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFC79AF8)
-                    )
-                ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = null
-                    )
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    Text("Add Asset")
-                }
-            }
-        }
     ) { paddingValues ->
 
-        //  MAP
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GoogleMap(
+
+            Text(
+                text = if (isFilterExpanded) "Click to close" else "Click to open",
                 modifier = Modifier
-                    .fillMaxSize(),
-                cameraPositionState = cameraPositionState,
-                properties = MapProperties(
-                    isMyLocationEnabled = true
-                ),
-                uiSettings = MapUiSettings(
-                    myLocationButtonEnabled = true
-                ),
-                onMapClick = { latLng ->
-
-                    if (!isDrawingMode) return@GoogleMap
-
-                    when (geometryType) {
-
-                        "POINT" -> {
-                            capturedPoint = latLng
-                        }
-
-                        "LINE" -> {
-                            linePoints.add(latLng)
-                        }
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .clickable {
+                        isFilterExpanded = !isFilterExpanded
                     }
-                }
-            ) {
-                capturedPoint?.let { point ->
+                    .padding(vertical = 5.dp),
+                textAlign = TextAlign.Center,
+                color = Color.Black,
+            )
 
-                    val markerState = rememberMarkerState(
-                        position = point
-                    )
-
-                    Marker(
-                        state = markerState
-                    )
-                }
-
-                linePoints.forEach { point ->
-                    Marker(
-                        state = rememberMarkerState(position = point)
-                    )
-                }
-
-                if (linePoints.size >= 2) {
-
-                    Polyline(
-                        points = linePoints.toList(),
-                        color = Color.Blue,
-                        width = 8f
-                    )
-                }
-
-                createdAssetMarkers.forEach { (point, asset) ->
-
-                    val bitmap = remember(asset.assetId) {
-
-                        createLabeledSquareMarker(
-                            text = asset.assetId.toString(),
-                            squareColor = android.graphics.Color.RED,
-                            squareSize = 25,
-                            textSizeSp = 10f,
-                            textColor = android.graphics.Color.BLACK,
-                            context = context
-                        )
-                    }
-
-                    Marker(
-                        state = rememberMarkerState(
-                            position = point
-                        ),
-                        icon = BitmapDescriptorFactory.fromBitmap(bitmap),
-                        onClick = {
-                            selectedMarkerAsset = asset
-                            markerAssetDialog = true
-                            true
-                        }
-                    )
-                }
-
-                createdAssetPolylines.forEach { (line, asset) ->
-
-                    Polyline(
-                        points = line,
-                        width = 8f,
-                        color = Color.Blue,
-                        clickable = true,
-                        onClick = {
-                            selectedMarkerAsset = asset
-                            markerAssetDialog = true
-                        }
-                    )
-                }
-            }
             AnimatedVisibility(
-                visible =
-                    isDrawingMode &&
-                            (
-                                    (geometryType == "POINT" && capturedPoint != null) ||
-                                            (geometryType == "LINE" && linePoints.size >= 2)
-                                    ),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 80.dp)
+                visible = isFilterExpanded
             ) {
-
-                Button(
-                    onClick = {
-
-                        geometrySaved = true
-                        locationError = false
-                        isDrawingMode = false
-                        isSidePanelOpen = true
-                    }
-                ) {
-                    Text("Save Geometry")
-                }
-            }
-
-            Column(
+                Column(
                     modifier = Modifier
-                        .padding(
-                            start = 12.dp,
-                            end = 55.dp,
-                            top = 8.dp
-                        )
-                    ) {
-                CustomDropdown(
-                    selectedValue = selectedProject?.projectName ?: "",
-                    placeholder = "Select Project",
-                    items = projectNames,
-                    onValueSelected = { projectName ->
+                        .fillMaxWidth()
+                        .background(Color.White)
+                        .padding(12.dp)
+                ) {
 
-                        selectedProject =
-                            projects.find {
+                    CustomDropdown(
+                        selectedValue = selectedProject?.projectName ?: "",
+                        placeholder = "Select Project",
+                        items = projectNames,
+                        onValueSelected = { projectName ->
+
+                            isFilterExpanded = false
+
+                            selectedProject = projects.find {
                                 it.projectName == projectName
                             }
 
-                        createdAssetMarkers.clear()
-                        createdAssetPolylines.clear()
+                            createdAssetMarkers.clear()
+                            createdAssetPolylines.clear()
+                            clearAssetForm()
 
-                        selectedProject?.projectId?.let {
-                            viewModel.loadCreatedAssets(it)
+                            selectedProject?.projectId?.let {
+                                viewModel.loadCreatedAssets(it)
+                            }
                         }
-
-                    }
-                )
+                    )
+                }
             }
-            val panelWidth by animateDpAsState(
-                targetValue = if (selectedAsset != null && isSidePanelOpen) 300.dp else 0.dp,
-                label = "side_panel"
-            )
 
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .align(Alignment.CenterEnd)
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
-
-                Card(
+                GoogleMap(
                     modifier = Modifier
-                        .width(panelWidth)
-                        .fillMaxHeight()
-                        .align(Alignment.CenterEnd),
-                    shape = RoundedCornerShape(
-                        topStart = 16.dp,
-                        bottomStart = 16.dp
+                        .fillMaxSize(),
+                    cameraPositionState = cameraPositionState,
+                    properties = MapProperties(
+                        isMyLocationEnabled = true
                     ),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White
-                    )
-                ) {
+                    uiSettings = MapUiSettings(
+                        myLocationButtonEnabled = true
+                    ),
+                    onMapClick = { latLng ->
 
-                    if (selectedAsset != null && isSidePanelOpen) {
+                        if (!isDrawingMode) return@GoogleMap
 
-                        Column(
-                            modifier = Modifier.fillMaxSize()
-                        ) {
+                        when (geometryType) {
 
-                            // Scrollable Content
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .verticalScroll(rememberScrollState())
-                            ) {
-
-                                AssetHeader(
-                                    assetName,
-                                    assetCode,
-                                    assetCategory,
-                                    geometryType,
-                                    fieldcount,
-                                    status
-                                )
-
-                                AssetStepper(currentStep = currentStep)
-                                when(currentStep){
-                                    1 -> {
-                                        AssetIdentityCard(
-                                            assetName = assetName,
-                                            onAssetNameChange = {
-                                                assetName = it
-                                                assetNameError = false
-                                            },
-                                            assetDescription = assetDescription,
-                                            onAssetDescriptionChange = {
-                                                assetDescription = it
-                                            },
-                                            assetNameError = assetNameError,
-                                        )
-
-                                        StatusDateCard(
-                                            selectedStatus = selectedStatus,
-                                            onStatusSelected = {
-                                                selectedStatus = it
-                                            },
-                                            installDate = installDate,
-                                            onInstallDateChange = { installDate = it }
-                                        )
-                                    }
-                                    2 -> {
-                                        LocationStepContent(
-                                            geometryType = geometryType,
-                                            geometrySaved = geometrySaved,
-                                            capturedPoint = capturedPoint,
-                                            linePoints = linePoints,
-                                            onStartDrawing = {
-
-                                                isDrawingMode = true
-                                                isSidePanelOpen = false
-                                            },
-                                            onReplace = {
-
-                                                geometrySaved = false
-
-                                                capturedPoint = null
-                                                linePoints.clear()
-
-                                                isDrawingMode = true
-                                                isSidePanelOpen = false
-                                            },
-                                            onRemove = {
-
-                                                geometrySaved = false
-
-                                                capturedPoint = null
-                                                linePoints.clear()
-                                            },
-                                            locationError = locationError
-                                        )
-                                    }
-                                    3 -> {
-                                        AttributesCard(
-                                            fields = assetConfig?.data?.currentVersion?.schema?.fields ?: emptyList(),
-                                            values = attributeValues,
-                                            dropdownSnapshots = dropdownSnapshots,
-                                            fieldErrors = fieldErrors
-                                        )
-                                    }
-                                }
-
+                            "POINT" -> {
+                                capturedPoint = latLng
                             }
 
-                            // Bottom Buttons
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp, 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            "LINE" -> {
+                                linePoints.add(latLng)
+                            }
+                        }
+                    }
+                ) {
+                    capturedPoint?.let { point ->
+
+                        val markerState = rememberMarkerState(
+                            position = point
+                        )
+
+                        Marker(
+                            state = markerState
+                        )
+                    }
+
+                    linePoints.forEach { point ->
+                        Marker(
+                            state = rememberMarkerState(position = point)
+                        )
+                    }
+
+                    if (linePoints.size >= 2) {
+
+                        Polyline(
+                            points = linePoints.toList(),
+                            color = Color.Blue,
+                            width = 8f
+                        )
+                    }
+
+                    createdAssetMarkers.forEach { (point, asset) ->
+
+                        val bitmap = remember(asset.assetId) {
+
+                            createLabeledSquareMarker(
+                                text = asset.assetId.toString(),
+                                squareColor = android.graphics.Color.RED,
+                                squareSize = 25,
+                                textSizeSp = 10f,
+                                textColor = android.graphics.Color.BLACK,
+                                context = context
+                            )
+                        }
+
+                        Marker(
+                            state = rememberMarkerState(
+                                position = point
+                            ),
+                            icon = BitmapDescriptorFactory.fromBitmap(bitmap),
+                            onClick = {
+                                selectedMarkerAsset = asset
+                                markerAssetDialog = true
+                                true
+                            }
+                        )
+                    }
+
+                    createdAssetPolylines.forEach { (line, asset) ->
+
+                        Polyline(
+                            points = line,
+                            width = 8f,
+                            color = Color.Blue,
+                            clickable = true,
+                            onClick = {
+                                selectedMarkerAsset = asset
+                                markerAssetDialog = true
+                            }
+                        )
+                    }
+                }
+
+                FloatingActionButton(
+                    onClick = {
+                        if (isAddAssetEnabled) {
+                            showAssetDialog = true
+                            viewModel.loadAssets()
+                        }else{
+                            Toast.makeText(context, "First Select Project", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(
+                            top = 55.dp,
+                            end = 10.dp
+                        )
+                        .size(43.dp),
+                    containerColor = if (isAddAssetEnabled)
+                        Color(0xFFC79AF8)
+                    else
+                        Color.LightGray
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add Asset",
+                        tint = if (isAddAssetEnabled)
+                            Color.White
+                        else
+                            Color.DarkGray
+                    )
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible =
+                        isDrawingMode &&
+                                (
+                                        (geometryType == "POINT" && capturedPoint != null) ||
+                                                (geometryType == "LINE" && linePoints.size >= 2)
+                                        ),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 80.dp)
+                ) {
+
+                    Button(
+                        onClick = {
+
+                            geometrySaved = true
+                            locationError = false
+                            isDrawingMode = false
+                            isSidePanelOpen = true
+                        }
+                    ) {
+                        Text("Save Geometry")
+                    }
+                }
+
+                val panelWidth by animateDpAsState(
+                    targetValue = if (selectedAsset != null && isSidePanelOpen) 300.dp else 0.dp,
+                    label = "side_panel"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .align(Alignment.CenterEnd)
+                ) {
+
+                    Card(
+                        modifier = Modifier
+                            .width(panelWidth)
+                            .fillMaxHeight()
+                            .align(Alignment.CenterEnd),
+                        shape = RoundedCornerShape(
+                            topStart = 16.dp,
+                            bottomStart = 16.dp
+                        ),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color.White
+                        )
+                    ) {
+
+                        if (selectedAsset != null && isSidePanelOpen) {
+
+                            Column(
+                                modifier = Modifier.fillMaxSize()
                             ) {
 
-                                OutlinedButton(
-                                    onClick = {
-
-                                        if (currentStep == 1) {
-
-                                            clearAssetForm()
-
-                                        } else {
-
-                                            currentStep--
-                                        }
-                                    },
+                                // Scrollable Content
+                                Column(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(42.dp)
+                                        .verticalScroll(rememberScrollState())
                                 ) {
-                                    Text(
-                                        if (currentStep == 1) "Cancel" else "Back",
-                                        fontSize = 12.sp
+
+                                    AssetHeader(
+                                        assetName,
+                                        assetCode,
+                                        assetCategory,
+                                        geometryType,
+                                        fieldcount,
+                                        status
                                     )
+
+                                    AssetStepper(currentStep = currentStep)
+                                    when (currentStep) {
+                                        1 -> {
+                                            AssetIdentityCard(
+                                                assetName = assetName,
+                                                onAssetNameChange = {
+                                                    assetName = it
+                                                    assetNameError = false
+                                                },
+                                                assetDescription = assetDescription,
+                                                onAssetDescriptionChange = {
+                                                    assetDescription = it
+                                                },
+                                                assetNameError = assetNameError,
+                                            )
+
+                                            StatusDateCard(
+                                                selectedStatus = selectedStatus,
+                                                onStatusSelected = {
+                                                    selectedStatus = it
+                                                },
+                                                installDate = installDate,
+                                                onInstallDateChange = { installDate = it }
+                                            )
+                                        }
+
+                                        2 -> {
+                                            LocationStepContent(
+                                                geometryType = geometryType,
+                                                geometrySaved = geometrySaved,
+                                                capturedPoint = capturedPoint,
+                                                linePoints = linePoints,
+                                                onStartDrawing = {
+
+                                                    isDrawingMode = true
+                                                    isSidePanelOpen = false
+                                                },
+                                                onReplace = {
+
+                                                    geometrySaved = false
+
+                                                    capturedPoint = null
+                                                    linePoints.clear()
+
+                                                    isDrawingMode = true
+                                                    isSidePanelOpen = false
+                                                },
+                                                onRemove = {
+
+                                                    geometrySaved = false
+
+                                                    capturedPoint = null
+                                                    linePoints.clear()
+                                                },
+                                                locationError = locationError
+                                            )
+                                        }
+
+                                        3 -> {
+                                            AttributesCard(
+                                                fields = assetConfig?.data?.currentVersion?.schema?.fields
+                                                    ?: emptyList(),
+                                                values = attributeValues,
+                                                dropdownSnapshots = dropdownSnapshots,
+                                                fieldErrors = fieldErrors
+                                            )
+                                        }
+                                    }
+
                                 }
 
-                                Button(
-                                    onClick = {
+                                // Bottom Buttons
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp, 12.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
 
-                                        when (currentStep) {
+                                    OutlinedButton(
+                                        onClick = {
 
-                                            1 -> {
+                                            if (currentStep == 1) {
 
-                                                if (assetName.isBlank()) {
+                                                clearAssetForm()
 
-                                                    assetNameError = true
+                                            } else {
 
-                                                } else {
-
-                                                    assetNameError = false
-                                                    currentStep = 2
-                                                }
+                                                currentStep--
                                             }
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                    ) {
+                                        Text(
+                                            if (currentStep == 1) "Cancel" else "Back",
+                                            fontSize = 12.sp
+                                        )
+                                    }
 
-                                            2 -> {
+                                    Button(
+                                        onClick = {
 
-                                                val isLocationValid =
-                                                    when (geometryType) {
+                                            when (currentStep) {
 
-                                                        "POINT" -> capturedPoint != null
+                                                1 -> {
 
-                                                        "LINE" -> linePoints.size >= 2
+                                                    if (assetName.isBlank()) {
 
-                                                        else -> false
-                                                    }
-
-                                                if (!isLocationValid) {
-
-                                                    locationError = true
-
-                                                } else {
-
-                                                    locationError = false
-                                                    currentStep = 3
-                                                }
-                                            }
-
-                                            3 -> {
-
-                                                fieldErrors.clear()
-
-                                                var hasError = false
-
-                                                assetConfig?.data?.currentVersion?.schema?.fields?.forEach { field ->
-
-                                                    if (field.required) {
-
-                                                        val value = attributeValues[field.id]
-
-                                                        val isEmpty =
-                                                            value == null ||
-                                                                    value.toString().isBlank()
-
-                                                        if (isEmpty) {
-
-                                                            fieldErrors[field.id] = true
-                                                            hasError = true
-                                                        }
-                                                    }
-                                                }
-
-                                                if (hasError) {
-                                                    return@Button
-                                                }
-
-
-                                                val wkt =
-                                                    if (geometryType == "POINT") {
-
-                                                        "POINT (${capturedPoint!!.longitude} ${capturedPoint!!.latitude})"
+                                                        assetNameError = true
 
                                                     } else {
 
-                                                        "LINESTRING (" +
-                                                                linePoints.joinToString(",") {
-                                                                    "${it.longitude} ${it.latitude}"
-                                                                } +
-                                                                ")"
+                                                        assetNameError = false
+                                                        currentStep = 2
+                                                    }
+                                                }
+
+                                                2 -> {
+
+                                                    val isLocationValid =
+                                                        when (geometryType) {
+
+                                                            "POINT" -> capturedPoint != null
+
+                                                            "LINE" -> linePoints.size >= 2
+
+                                                            else -> false
+                                                        }
+
+                                                    if (!isLocationValid) {
+
+                                                        locationError = true
+
+                                                    } else {
+
+                                                        locationError = false
+                                                        currentStep = 3
+                                                    }
+                                                }
+
+                                                3 -> {
+
+                                                    fieldErrors.clear()
+
+                                                    var hasError = false
+
+                                                    assetConfig?.data?.currentVersion?.schema?.fields?.forEach { field ->
+
+                                                        if (field.required) {
+
+                                                            val value = attributeValues[field.id]
+
+                                                            val isEmpty =
+                                                                value == null ||
+                                                                        value.toString().isBlank()
+
+                                                            if (isEmpty) {
+
+                                                                fieldErrors[field.id] = true
+                                                                hasError = true
+                                                            }
+                                                        }
                                                     }
 
-                                                val request = CreateAddAssetRequest(
-                                                    regionId = 0,
-                                                    ParentAssetId = parentAssetTypeId,
-                                                    projectId = selectedProject!!.projectId,
-                                                    assetTypeId = selectedAsset!!.data.assetTypeId!!,
-                                                    assetCode = assetCode,
-                                                    assetName = assetName,
-                                                    description = assetDescription,
-                                                    status = selectedStatus.uppercase(),
-                                                    installedOn = installDate.ifBlank { null },
-                                                    fields = emptyList(),
-                                                    dynamicFields = DynamicFieldsRequest(
-                                                        data = attributeValues.toMap(),
-                                                        dropdownSnapshot = dropdownSnapshots
-                                                    ),
+                                                    if (hasError) {
+                                                        return@Button
+                                                    }
 
-                                                    geometry = GeometryRequest(
-                                                        wkt = wkt
-                                                    ),
-                                                )
 
-                                                viewModel.saveAddAsset(
-                                                    request = request
-                                                ) { assetId ->
+                                                    val wkt =
+                                                        if (geometryType == "POINT") {
 
-                                                    val dynamicRequest =
-                                                        UpdateDynamicFieldsRequest(
+                                                            "POINT (${capturedPoint!!.longitude} ${capturedPoint!!.latitude})"
+
+                                                        } else {
+
+                                                            "LINESTRING (" +
+                                                                    linePoints.joinToString(",") {
+                                                                        "${it.longitude} ${it.latitude}"
+                                                                    } +
+                                                                    ")"
+                                                        }
+
+                                                    val request = CreateAddAssetRequest(
+                                                        regionId = 0,
+                                                        ParentAssetId = parentAssetTypeId,
+                                                        projectId = selectedProject!!.projectId,
+                                                        assetTypeId = selectedAsset!!.data.assetTypeId!!,
+                                                        assetCode = assetCode,
+                                                        assetName = assetName,
+                                                        description = assetDescription,
+                                                        status = selectedStatus.uppercase(),
+                                                        installedOn = installDate.ifBlank { null },
+                                                        fields = emptyList(),
+                                                        dynamicFields = DynamicFieldsRequest(
                                                             data = attributeValues.toMap(),
                                                             dropdownSnapshot = dropdownSnapshots
+                                                        ),
+
+                                                        geometry = GeometryRequest(
+                                                            wkt = wkt
+                                                        ),
+                                                    )
+
+                                                    viewModel.saveAddAsset(
+                                                        request = request
+                                                    ) { assetId ->
+
+                                                        val dynamicRequest =
+                                                            UpdateDynamicFieldsRequest(
+                                                                data = attributeValues.toMap(),
+                                                                dropdownSnapshot = dropdownSnapshots
+                                                            )
+
+                                                        viewModel.updateDynamicFields(
+                                                            assetId = assetId,
+                                                            request = dynamicRequest
                                                         )
 
-                                                    viewModel.updateDynamicFields(
-                                                        assetId = assetId,
-                                                        request = dynamicRequest
-                                                    )
+                                                        selectedProject?.projectId?.let { projectId ->
+                                                            viewModel.loadCreatedAssets(projectId)
+                                                        }
+                                                    }
                                                 }
                                             }
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(42.dp)
-                                ) {
-                                    Text(
-                                        if (currentStep == 3) "Save" else "Next",
-                                        fontSize = 12.sp
-                                    )
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(42.dp)
+                                    ) {
+                                        Text(
+                                            if (currentStep == 3) "Save" else "Next",
+                                            fontSize = 12.sp
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                if (selectedAsset != null) {
+                    if (selectedAsset != null) {
 
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .offset(x = (-20).dp),
-                        shape = CircleShape,
-                        shadowElevation = 8.dp,
-                        color = Color.White
-                    ) {
-
-                        IconButton(
-                            onClick = {
-                                isSidePanelOpen = !isSidePanelOpen
-                            }
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .offset(x = (-20).dp),
+                            shape = CircleShape,
+                            shadowElevation = 8.dp,
+                            color = Color.White
                         ) {
-                            Icon(
-                                imageVector =
-                                    if (isSidePanelOpen)
-                                        Icons.Default.KeyboardArrowRight
-                                    else
-                                        Icons.Default.KeyboardArrowLeft,
-                                contentDescription = null,
-                                tint = Color.Black
-                            )
+
+                            IconButton(
+                                onClick = {
+                                    isSidePanelOpen = !isSidePanelOpen
+                                }
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        if (isSidePanelOpen)
+                                            Icons.Default.KeyboardArrowRight
+                                        else
+                                            Icons.Default.KeyboardArrowLeft,
+                                    contentDescription = null,
+                                    tint = Color.Black
+                                )
+                            }
                         }
                     }
                 }
@@ -930,9 +972,15 @@ fun InventoryMapScreen(
                 onClose = {
                     markerAssetDialog = false
                 },
+                onExpPdf = {
+                    viewModel.exportPdf(
+                        assetId = selectedMarkerAsset!!.assetId,
+                        context = context
+                    )
+                },
                 onModify = {
 
-                }
+                },
             )
         }
     }
@@ -968,6 +1016,7 @@ fun InventoryMapScreen(
 fun AssetDetailsDialog(
     asset: CreatedAssetData,
     onClose: () -> Unit,
+    onExpPdf: () -> Unit,
     onModify: () -> Unit
 ) {
 
@@ -1198,22 +1247,32 @@ fun AssetDetailsDialog(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(
+                        rememberScrollState()
+                    )
                     .padding(16.dp),
                 horizontalArrangement =
-                    Arrangement.spacedBy(12.dp)
+                    Arrangement.spacedBy(8.dp)
             ) {
 
                 OutlinedButton(
                     onClick = onClose,
-                    modifier = Modifier.weight(1f)
+//                    modifier = Modifier.weight(1f)
                 ) {
                     Text("Close")
                 }
 
                 Button(
+                    onClick = onExpPdf,
+//                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Export PDF")
+                }
+
+                Button(
                     onClick = onModify,
                     enabled = false,
-                    modifier = Modifier.weight(1f)
+//                    modifier = Modifier.weight(1f)
                 ) {
                     Text("Modify")
                 }
@@ -2524,23 +2583,23 @@ fun createLabeledSquareMarker(
     squareSize: Int,
     textSizeSp: Float,
     textColor: Int,
-    context: android.content.Context
-): android.graphics.Bitmap {
+    context: Context
+): Bitmap {
 
     val density = context.resources.displayMetrics
 
-    val textPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = textColor
-        textSize = android.util.TypedValue.applyDimension(
-            android.util.TypedValue.COMPLEX_UNIT_SP,
+        textSize = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_SP,
             textSizeSp,
             density
         )
-        textAlign = android.graphics.Paint.Align.CENTER
-        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
-    val textBounds = android.graphics.Rect()
+    val textBounds = Rect()
     textPaint.getTextBounds(text, 0, text.length, textBounds)
 
     val textWidth = textPaint.measureText(text)
@@ -2552,13 +2611,13 @@ fun createLabeledSquareMarker(
     val bitmapWidth = (textWidth + horizontalPadding * 2).toInt()
     val bitmapHeight = (textHeight + verticalPadding + squareSize + verticalPadding).toInt()
 
-    val bitmap = android.graphics.Bitmap.createBitmap(
+    val bitmap = Bitmap.createBitmap(
         bitmapWidth,
         bitmapHeight,
-        android.graphics.Bitmap.Config.ARGB_8888
+        Bitmap.Config.ARGB_8888
     )
 
-    val canvas = android.graphics.Canvas(bitmap)
+    val canvas = Canvas(bitmap)
 
     // Draw TEXT (top)
     val textX = bitmapWidth / 2f
@@ -2566,7 +2625,7 @@ fun createLabeledSquareMarker(
     canvas.drawText(text, textX, textY, textPaint)
 
     // Draw RED SQUARE (below text)
-    val squarePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+    val squarePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = squareColor
     }
 
