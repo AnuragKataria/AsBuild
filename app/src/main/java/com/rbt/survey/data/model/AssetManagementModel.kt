@@ -56,6 +56,70 @@ data class AssetDetailsData(
     val fields: List<Any>
 )
 
+data class CreatedAssetDetailResponse(
+    val success: Boolean,
+    val message: String?,
+    val data: CreatedAssetDetailsData,
+    val errors: Any?
+)
+
+data class CreatedAssetDetailsData(
+    val portUtilization: List<Any> = emptyList(),
+    val coreUtilization: List<Any> = emptyList(),
+    val assetDynamicFieldValueId: Int,
+    val assetId: Int,
+    val projectId: Int,
+    val assetTypeId: Int,
+    val assetCode: String,
+    val configVersionId: Int,
+    val configVersionNo: Int,
+    val data: Map<String, JsonElement>?,
+    val dropdownSnapshot: JsonElement?,
+    val createdOn: String?,
+    val updatedOn: String?,
+    val createdBy: String?,
+    val updatedBy: String?,
+    val files: List<AssetFile>?,
+    val asset: CreatedAsset?,
+    val assetGeometry: AssetGeometry?,
+    val parentAssetId: Int?
+)
+
+data class AssetFile(
+    val fileId: Int?,
+    val assetId: Int?,
+    val fieldId: String?,
+    val originalFileName: String?,
+    val storedFileName: String?,
+    val relativePath: String?,
+    val contentType: String?,
+    val fileSize: Long?,
+    val createdOn: String?,
+    val uploadedBy: String?
+)
+data class CreatedAsset(
+    val assetId: Int,
+    val tenantId: Int,
+    val projectId: Int,
+    val regionId: Int?,
+    val assetTypeId: Int,
+    val assetCode: String?,
+    val assetName: String?,
+    val status: String?,
+    val installedOn: String?,
+    val retiredOn: String?,
+    val createdOn: String?,
+    val updatedOn: String?,
+    val isDeleted: Boolean,
+    val parentAssetId: Int?,
+    val description: String?
+)
+data class AssetGeometry(
+    val assetId: Int,
+    val wkt: String?,
+    val srid: Int?
+)
+
 
 data class FormFieldMasterResponse(
     val success: Boolean,
@@ -256,66 +320,80 @@ data class UpdateDynamicFieldsRequest(
     val useCurrentVersion: Boolean = false
 )
 
+//data class CreatedAssetsResponse(
+//    val success: Boolean,
+//    val message: String?,
+//    val data: List<CreatedAssetData>,
+//    val errors: Any?
+//)
+//data class CreatedAssetData(
+//    val assetDynamicFieldValueId: Int,
+//    val assetId: Int,
+//    val projectId: Int,
+//    val assetTypeId: Int,
+//    val assetCode: String,
+//    val configVersionId: Int,
+//    val configVersionNo: Int,
+//    val data: Map<String, JsonElement>?,
+//    val dropdownSnapshot: JsonElement?,
+//    val createdOn: String?,
+//    val updatedOn: String?,
+//    val createdBy: String?,
+//    val updatedBy: String?,
+//    val files: List<AssetFile>?,
+//    val asset: CreatedAsset?,
+//    val assetGeometry: AssetGeometry?,
+//    val parentAssetId: Int?
+//)
+//data class createdDropdownSnapshot(
+//    val label: String?,
+//    val value: String?
+//)
+//data class AssetFile(
+//    val fileId: Int?,
+//    val assetId: Int?,
+//    val fieldId: String?,
+//    val originalFileName: String?,
+//    val storedFileName: String?,
+//    val relativePath: String?,
+//    val contentType: String?,
+//    val fileSize: Long?,
+//    val createdOn: String?,
+//    val uploadedBy: String?
+//)
+//data class CreatedAsset(
+//    val assetId: Int,
+//    val tenantId: Int,
+//    val projectId: Int,
+//    val regionId: Int?,
+//    val assetTypeId: Int,
+//    val assetCode: String?,
+//    val assetName: String?,
+//    val status: String?,
+//    val installedOn: String?,
+//    val retiredOn: String?,
+//    val createdOn: String?,
+//    val updatedOn: String?,
+//    val isDeleted: Boolean,
+//    val parentAssetId: Int?,
+//    val description: String?
+//)
+//data class AssetGeometry(
+//    val assetId: Int,
+//    val wkt: String?,
+//    val srid: Int?
+//)
+
 data class CreatedAssetsResponse(
     val success: Boolean,
     val message: String?,
     val data: List<CreatedAssetData>,
     val errors: Any?
 )
+
 data class CreatedAssetData(
-    val assetDynamicFieldValueId: Int,
     val assetId: Int,
-    val projectId: Int,
     val assetTypeId: Int,
     val assetCode: String,
-    val configVersionId: Int,
-    val configVersionNo: Int,
     val data: Map<String, JsonElement>?,
-    val dropdownSnapshot: JsonElement?,
-    val createdOn: String?,
-    val updatedOn: String?,
-    val createdBy: String?,
-    val updatedBy: String?,
-    val files: List<AssetFile>?,
-    val asset: CreatedAsset?,
-    val assetGeometry: AssetGeometry?,
-    val parentAssetId: Int?
-)
-data class createdDropdownSnapshot(
-    val label: String?,
-    val value: String?
-)
-data class AssetFile(
-    val fileId: Int?,
-    val assetId: Int?,
-    val fieldId: String?,
-    val originalFileName: String?,
-    val storedFileName: String?,
-    val relativePath: String?,
-    val contentType: String?,
-    val fileSize: Long?,
-    val createdOn: String?,
-    val uploadedBy: String?
-)
-data class CreatedAsset(
-    val assetId: Int,
-    val tenantId: Int,
-    val projectId: Int,
-    val regionId: Int?,
-    val assetTypeId: Int,
-    val assetCode: String?,
-    val assetName: String?,
-    val status: String?,
-    val installedOn: String?,
-    val retiredOn: String?,
-    val createdOn: String?,
-    val updatedOn: String?,
-    val isDeleted: Boolean,
-    val parentAssetId: Int?,
-    val description: String?
-)
-data class AssetGeometry(
-    val assetId: Int,
-    val wkt: String?,
-    val srid: Int?
 )

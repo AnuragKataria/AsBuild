@@ -49,6 +49,12 @@ class AssetRepository (
         return apiService.getAssetDetail(assetTypeId)
     }
 
+    suspend fun getCretedAssetDetail(
+        assetId: Int
+    ): CreatedAssetDetailResponse {
+        return apiService.getCretedAssetDetail(assetId)
+    }
+
     suspend fun getAssetConfig(
         assetTypeId: Int
     ): Response<AssetConfigResponse> {

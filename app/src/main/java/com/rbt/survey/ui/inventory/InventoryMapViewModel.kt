@@ -22,10 +22,14 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
+import com.google.maps.android.compose.MapType
 
 class InventoryMapViewModel(
     private val repository: AssetRepository
 ) : ViewModel() {
+
+    private val _mapType = MutableStateFlow(MapType.NORMAL)
+    val mapType: StateFlow<MapType> = _mapType
 
     private val _projects = MutableStateFlow<List<ProjectResponse>>(emptyList())
     val projects: StateFlow<List<ProjectResponse>> = _projects
@@ -41,6 +45,9 @@ class InventoryMapViewModel(
 
     private val _assetDetails = MutableStateFlow<AssetDetailResponse?>(null)
     val assetDetails: StateFlow<AssetDetailResponse?> = _assetDetails
+
+    private val _createdAssetDetails = MutableStateFlow<CreatedAssetDetailsData?>(null)
+    val createdAssetDetails: StateFlow<CreatedAssetDetailsData?> = _createdAssetDetails
 
     private val _assetConfig = MutableStateFlow<AssetConfigResponse?>(null)
 
@@ -128,6 +135,25 @@ class InventoryMapViewModel(
                 val details = repository.getAssetDetail(assetTypeId)
 
                 _assetDetails.value = details
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isAssetLoading.value = false
+            }
+        }
+    }
+
+    fun loadCreatedAssetDetails(assetId: Int) {
+
+        viewModelScope.launch {
+            try {
+                _isAssetLoading.value = true
+                _isLoadingmessage.value = "Loading Assets Deatils..."
+
+                val details = repository.getCretedAssetDetail(assetId)
+
+                _createdAssetDetails.value = details.data
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -232,6 +258,10 @@ class InventoryMapViewModel(
         _saveMessage.value = null
     }
 
+    fun setMapType(type: MapType) {
+        _mapType.value = type
+    }
+
     fun loadCreatedAssets(
         projectId: Int
     ) {
@@ -244,10 +274,8 @@ class InventoryMapViewModel(
 
                 val response =
                     repository.getCreatedAssets(projectId)
-                if (response.success) {
-                    _createdAssets.value =
-                        response.data
-                }
+
+                _createdAssets.value = response.data
 
             } catch (e: Exception) {
 

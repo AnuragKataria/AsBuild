@@ -39,6 +39,11 @@ interface AssetApi {
         @Path("assetTypeId") assetTypeId: Int
     ): AssetDetailResponse
 
+    @GET("assets/{assetId}/dynamic-fields/details")
+    suspend fun getCretedAssetDetail(
+        @Path("assetId") assetTypeId: Int
+    ): CreatedAssetDetailResponse
+
 
     @GET("asset-types/{assetTypeId}/dynamic-fields/config")
     suspend fun getAssetConfig(
@@ -96,7 +101,7 @@ interface AssetApi {
     @GET("dynamic-connectivity/rules")
     suspend fun getConnectivityRules(): List<ConnectivityRuleResponse>
 
-    @POST("projects/{projectId}/asset-dynamic-fields/created-assets/search")
+    @POST("projects/{projectId}/asset-dynamic-fields/created-assets/search-slim")
     suspend fun getCreatedAssets(
         @Path("projectId") projectId: Int,
         @Body body: JsonObject

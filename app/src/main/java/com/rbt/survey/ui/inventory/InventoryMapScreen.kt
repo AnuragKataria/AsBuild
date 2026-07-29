@@ -77,11 +77,21 @@ import android.util.Log
 import android.util.TypedValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.ui.text.style.TextAlign
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import androidx.compose.ui.window.Dialog
 import coil.ImageLoader
+import com.google.maps.android.compose.MapType
+import com.google.maps.android.compose.clustering.Clustering
+import com.rbt.survey.R
 import com.rbt.survey.data.remote.RetrofitClient
+import com.rbt.survey.ui.map.MapTypeItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,10 +108,12 @@ fun InventoryMapScreen(
     val projects by viewModel.projects.collectAsState()
     val connectivityRules by viewModel.connectivityRules.collectAsState()
     val createdAssets by viewModel.createdAssets.collectAsState()
+    val createdAssetDetail by viewModel.createdAssetDetails.collectAsState()
     val allassetDetails by viewModel.allassetDetails.collectAsState()
     val assetDetails by viewModel.assetDetails.collectAsState()
     val assetConfig by viewModel.assetConfig.collectAsState()
     val saveMessage by viewModel.saveMessage.collectAsState()
+    val mapType by viewModel.mapType.collectAsState()
 
     var selectedProject by remember { mutableStateOf<ProjectResponse?>(null) }
     var selectedAsset by remember { mutableStateOf<AssetDetailResponse?>(null) }
@@ -111,6 +123,7 @@ fun InventoryMapScreen(
     }
 
     var isSidePanelOpen by remember { mutableStateOf(false) }
+    var mapexpanded by remember { mutableStateOf(false) }
 
     val projectNames = projects.map { it.projectName }
 
@@ -128,10 +141,24 @@ fun InventoryMapScreen(
         LocationServices.getFusedLocationProviderClient(context)
     }
 
+    val allClusterItems = remember {
+        mutableStateListOf<AssetClusterItem>()
+    }
+
+    val visibleClusterItems = remember {
+        mutableStateListOf<AssetClusterItem>()
+    }
+
+    var mapLoading by remember {
+        mutableStateOf(false)
+    }
+
+
     var assetName by remember { mutableStateOf("") }
     var assetCode by remember { mutableStateOf("") }
     var assetCategory by remember { mutableStateOf("") }
     var geometryType by remember { mutableStateOf("") }
+    var assetDetailGeometryType by remember { mutableStateOf("") }
     var imageurl by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("") }
     var fieldcount by remember { mutableStateOf(0) }
@@ -188,6 +215,7 @@ fun InventoryMapScreen(
     }
 
     LaunchedEffect(assetDetails) {
+        assetDetailGeometryType = assetDetails?.data?.geometryType.toString()
         imageurl = base_URL + assetDetails?.data?.imageUrl.toString()
     }
 
@@ -254,69 +282,210 @@ fun InventoryMapScreen(
         )
     }
 
+//    LaunchedEffect(createdAssets) {
+//
+//        createdAssets.forEach { asset ->
+//
+//            val wkt = asset.data
+//                ?.get("wkt")
+//                ?.takeIf { !it.isJsonNull }
+//                ?.asString
+//                ?: return@forEach
+//
+//            when {
+//
+//                wkt.startsWith("POINT", true) -> {
+//
+//                    val coords = wkt
+//                        .substringAfter("(")
+//                        .substringBefore(")")
+//                        .trim()
+//                        .split(" ")
+//
+//                    if (coords.size >= 2) {
+//
+//                        createdAssetMarkers.add(
+//                            Pair(
+//                                LatLng(
+//                                    coords[1].toDouble(),
+//                                    coords[0].toDouble()
+//                                ),
+//                                asset
+//                            )
+//                        )
+//                    }
+//                }
+//
+//                wkt.startsWith("LINESTRING", true) -> {
+//
+//                    val points = wkt
+//                        .substringAfter("(")
+//                        .substringBefore(")")
+//                        .split(",")
+//
+//                    val latLngs = points.mapNotNull { point ->
+//
+//                        val coords = point.trim().split(" ")
+//
+//                        if (coords.size >= 2) {
+//
+//                            LatLng(
+//                                coords[1].toDouble(),
+//                                coords[0].toDouble()
+//                            )
+//
+//                        } else {
+//                            null
+//                        }
+//                    }
+//
+//                    if (latLngs.isNotEmpty()) {
+//                        createdAssetPolylines.add(
+//                            Pair(
+//                                latLngs,
+//                                asset
+//                            )
+//                        )
+//                    }
+//                }
+//            }
+//        }
+//    }
+
     LaunchedEffect(createdAssets) {
 
-        createdAssets.forEach { asset ->
+        val result = withContext(Dispatchers.Default) {
 
-            val wkt = asset.assetGeometry?.wkt ?: return@forEach
+            val pointItems = mutableListOf<AssetClusterItem>()
 
-            when {
+            val polylines =
+                mutableListOf<Pair<List<LatLng>, CreatedAssetData>>()
 
-                wkt.startsWith("POINT", true) -> {
+            createdAssets.forEach { asset ->
 
-                    val coords = wkt
-                        .substringAfter("(")
-                        .substringBefore(")")
-                        .trim()
-                        .split(" ")
+                val wkt = asset.data
+                    ?.get("wkt")
+                    ?.takeIf { !it.isJsonNull }
+                    ?.asString
+                    ?.trim()
+                    ?: return@forEach
 
-                    if (coords.size >= 2) {
+                when {
 
-                        createdAssetMarkers.add(
-                            Pair(
-                                LatLng(
-                                    coords[1].toDouble(),
-                                    coords[0].toDouble()
-                                ),
-                                asset
-                            )
-                        )
-                    }
-                }
+                    wkt.startsWith("POINT", true) -> {
 
-                wkt.startsWith("LINESTRING", true) -> {
+                        runCatching {
 
-                    val points = wkt
-                        .substringAfter("(")
-                        .substringBefore(")")
-                        .split(",")
+                            val coords = wkt
+                                .substringAfter("(")
+                                .substringBefore(")")
+                                .trim()
+                                .split(Regex("\\s+"))
 
-                    val latLngs = points.mapNotNull { point ->
+                            if (coords.size >= 2) {
 
-                        val coords = point.trim().split(" ")
-
-                        if (coords.size >= 2) {
-
-                            LatLng(
-                                coords[1].toDouble(),
-                                coords[0].toDouble()
-                            )
-
-                        } else {
-                            null
+                                pointItems.add(
+                                    AssetClusterItem(
+                                        latLng = LatLng(
+                                            coords[1].toDouble(),
+                                            coords[0].toDouble()
+                                        ),
+                                        asset = asset
+                                    )
+                                )
+                            }
                         }
                     }
 
-                    if (latLngs.isNotEmpty()) {
-                        createdAssetPolylines.add(
-                            Pair(
-                                latLngs,
-                                asset
-                            )
-                        )
+                    wkt.startsWith("LINESTRING", true) -> {
+
+                        runCatching {
+
+                            val latLngs = wkt
+                                .substringAfter("(")
+                                .substringBefore(")")
+                                .split(",")
+                                .mapNotNull { point ->
+
+                                    val coords = point
+                                        .trim()
+                                        .split(Regex("\\s+"))
+
+                                    if (coords.size >= 2) {
+
+                                        LatLng(
+                                            coords[1].toDouble(),
+                                            coords[0].toDouble()
+                                        )
+
+                                    } else {
+                                        null
+                                    }
+                                }
+
+                            if (latLngs.isNotEmpty()) {
+
+                                polylines.add(
+                                    Pair(
+                                        latLngs,
+                                        asset
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             }
+
+            Pair(pointItems, polylines)
+        }
+
+        allClusterItems.clear()
+        allClusterItems.addAll(result.first)
+
+        createdAssetPolylines.clear()
+        createdAssetPolylines.addAll(result.second)
+    }
+
+    LaunchedEffect(cameraPositionState, allClusterItems.size) {
+
+        snapshotFlow {
+            cameraPositionState.isMoving
+        }.collectLatest { moving ->
+
+            if (moving) return@collectLatest
+
+            mapLoading = true
+
+            delay(500)
+
+            val projection =
+                cameraPositionState.projection
+                    ?: return@collectLatest
+
+            val bounds =
+                projection.visibleRegion.latLngBounds
+
+            val filtered =
+                withContext(Dispatchers.Default) {
+
+                    allClusterItems.filter {
+
+                        bounds.contains(
+                            it.position
+                        )
+                    }
+                }
+
+            visibleClusterItems.clear()
+            visibleClusterItems.addAll(filtered)
+
+            Log.d(
+                "MAP_DEBUG",
+                "Visible Items = ${filtered.size}"
+            )
+
+            mapLoading = false
         }
     }
 
@@ -399,6 +568,7 @@ fun InventoryMapScreen(
                         .fillMaxSize(),
                     cameraPositionState = cameraPositionState,
                     properties = MapProperties(
+                        mapType = mapType,
                         isMyLocationEnabled = true
                     ),
                     uiSettings = MapUiSettings(
@@ -446,47 +616,105 @@ fun InventoryMapScreen(
                         )
                     }
 
-                    createdAssetMarkers.forEach { (point, asset) ->
+//                    createdAssetMarkers.forEach { (point, asset) ->
+//
+//                        val bitmap = remember(asset.assetId) {
+//
+//                            createLabeledSquareMarker(
+//                                text = asset.assetId.toString(),
+//                                squareColor = android.graphics.Color.RED,
+//                                squareSize = 25,
+//                                textSizeSp = 10f,
+//                                textColor = android.graphics.Color.BLACK,
+//                                context = context
+//                            )
+//                        }
+//
+//                        Marker(
+//                            state = rememberMarkerState(
+//                                position = point
+//                            ),
+//                            icon = BitmapDescriptorFactory.fromBitmap(bitmap),
+//                            onClick = {
+//                                viewModel.loadAssetDetails(asset.assetTypeId)
+//                                viewModel.loadCreatedAssetDetails(asset.assetId)
+//                                selectedMarkerAsset = asset
+//                                markerAssetDialog = true
+//                                true
+//                            }
+//                        )
+//                    }
 
-                        val bitmap = remember(asset.assetId) {
+                    Clustering(
+                        items = visibleClusterItems,
+                        clusterItemContent = { item ->
 
-                            createLabeledSquareMarker(
-                                text = asset.assetId.toString(),
-                                squareColor = android.graphics.Color.RED,
-                                squareSize = 25,
-                                textSizeSp = 10f,
-                                textColor = android.graphics.Color.BLACK,
-                                context = context
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+
+                                Text(
+                                    text = item.asset.assetId.toString(),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+
+                                Box(
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .background(Color.Red)
+                                )
+                            }
+                        },
+                        onClusterItemClick = { item ->
+
+                            viewModel.loadAssetDetails(
+                                item.asset.assetTypeId
+                            )
+
+                            viewModel.loadCreatedAssetDetails(
+                                item.asset.assetId
+                            )
+
+                            selectedMarkerAsset = item.asset
+
+                            markerAssetDialog = true
+
+                            true
+                        }
+                    )
+                    if (cameraPositionState.position.zoom >= 14f) {
+
+                        createdAssetPolylines.forEach { (line, asset) ->
+
+                            Polyline(
+                                points = line,
+                                width = 8f,
+                                color = Color.Blue,
+                                clickable = true,
+                                onClick = {
+                                    viewModel.loadAssetDetails(asset.assetTypeId)
+                                    viewModel.loadCreatedAssetDetails(asset.assetId)
+                                    selectedMarkerAsset = asset
+                                    markerAssetDialog = true
+                                }
                             )
                         }
-
-                        Marker(
-                            state = rememberMarkerState(
-                                position = point
-                            ),
-                            icon = BitmapDescriptorFactory.fromBitmap(bitmap),
-                            onClick = {
-                                viewModel.loadAssetDetails(asset.assetTypeId)
-                                selectedMarkerAsset = asset
-                                markerAssetDialog = true
-                                true
-                            }
-                        )
                     }
+                }
 
-                    createdAssetPolylines.forEach { (line, asset) ->
+                if (mapLoading) {
 
-                        Polyline(
-                            points = line,
-                            width = 8f,
-                            color = Color.Blue,
-                            clickable = true,
-                            onClick = {
-                                viewModel.loadAssetDetails(asset.assetTypeId)
-                                selectedMarkerAsset = asset
-                                markerAssetDialog = true
-                            }
-                        )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Color.Black.copy(alpha = 0.3f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
                     }
                 }
 
@@ -543,6 +771,104 @@ fun InventoryMapScreen(
                         }
                     ) {
                         Text("Save Geometry")
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.BottomEnd
+                ) {
+                    // 🔘 Floating Button
+                    FloatingActionButton(
+                        onClick = { mapexpanded = true },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 105.dp, end = 10.dp)
+                            .size(43.dp),
+                        containerColor = androidx.compose.ui.graphics.Color.White,
+                        contentColor = androidx.compose.ui.graphics.Color.Black
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = "Map Type"
+                        )
+                    }
+
+                    if (mapexpanded) {
+                        androidx.compose.ui.window.Dialog(
+                            onDismissRequest = { mapexpanded = false }
+                        ) {
+                            androidx.compose.material3.Surface(
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                color = androidx.compose.ui.graphics.Color.White
+                            ) {
+
+                                Column(
+                                    modifier = Modifier
+                                        .padding(16.dp)
+                                        .width(300.dp)
+                                ) {
+
+                                    // 🔝 HEADER (Title + Close)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+
+                                        Text(
+                                            text = "Map Type",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            color = androidx.compose.ui.graphics.Color.Black
+                                        )
+
+                                        IconButton(onClick = { mapexpanded = false }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Close",
+                                                tint = androidx.compose.ui.graphics.Color.Black
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // 🗺️ OPTIONS
+                                    MapTypeItem(
+                                        title = "Normal",
+                                        imageRes = R.drawable.defaultmap
+                                    ) {
+                                        viewModel.setMapType(MapType.NORMAL)
+                                        mapexpanded = false
+                                    }
+
+                                    MapTypeItem(
+                                        title = "Satellite",
+                                        imageRes = R.drawable.satellite
+                                    ) {
+                                        viewModel.setMapType(MapType.SATELLITE)
+                                        mapexpanded = false
+                                    }
+
+                                    MapTypeItem(
+                                        title = "Terrain",
+                                        imageRes = R.drawable.terrain
+                                    ) {
+                                        viewModel.setMapType(MapType.TERRAIN)
+                                        mapexpanded = false
+                                    }
+
+                                    MapTypeItem(
+                                        title = "Hybrid",
+                                        imageRes = R.drawable.hybrid
+                                    ) {
+                                        viewModel.setMapType(MapType.HYBRID)
+                                        mapexpanded = false
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -978,7 +1304,8 @@ fun InventoryMapScreen(
     }
     if (
         markerAssetDialog &&
-        selectedMarkerAsset != null
+        selectedMarkerAsset != null &&
+        createdAssetDetail != null
     ) {
 
         Dialog(
@@ -989,7 +1316,9 @@ fun InventoryMapScreen(
 
             AssetDetailsDialog(
                 asset = selectedMarkerAsset!!,
+                createdAssetDetail = createdAssetDetail!!,
                 imageurl = imageurl,
+                assetDetailGeometryType = assetDetailGeometryType,
                 imageLoader = imageLoader,
                 onClose = {
                     markerAssetDialog = false
@@ -1037,18 +1366,14 @@ fun InventoryMapScreen(
 @Composable
 fun AssetDetailsDialog(
     asset: CreatedAssetData,
+    createdAssetDetail: CreatedAssetDetailsData,
     imageurl: String,
+    assetDetailGeometryType: String,
     imageLoader: ImageLoader,
     onClose: () -> Unit,
     onExpPdf: () -> Unit,
     onModify: () -> Unit
 ) {
-
-    val geometryType =
-        asset.assetGeometry?.wkt
-            ?.substringBefore("(")
-            ?.uppercase()
-            ?: ""
 
     Card(
         modifier = Modifier
@@ -1092,7 +1417,7 @@ fun AssetDetailsDialog(
                         Column {
 
                             Text(
-                                text = asset.asset?.assetName ?: "-",
+                                text = asset.data?.get("assetName")?.asString ?: "-",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
@@ -1114,21 +1439,21 @@ fun AssetDetailsDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
 
-                        AssistChip(
-                            onClick = {},
-                            label = {
-                                Text(
-                                    asset.asset?.status ?: "-",
-                                    fontSize = 10.sp
-                                )
-                            }
-                        )
+//                        AssistChip(
+//                            onClick = {},
+//                            label = {
+//                                Text(
+//                                    asset.asset?.status ?: "-",
+//                                    fontSize = 10.sp
+//                                )
+//                            }
+//                        )
 
                         AssistChip(
                             onClick = {},
                             label = {
                                 Text(
-                                    geometryType,
+                                    assetDetailGeometryType,
                                     fontSize = 10.sp
                                 )
                             }
@@ -1180,7 +1505,7 @@ fun AssetDetailsDialog(
                         )
 
                         Text(
-                            "Asset Name     : ${asset.asset?.assetName ?: "-"}",
+                            "Asset Name     : ${asset.data?.get("assetName")?.asString ?: "-"}",
                             fontSize = 12.sp
                         )
 
@@ -1189,28 +1514,28 @@ fun AssetDetailsDialog(
                             fontSize = 12.sp
                         )
 
+//                        Text(
+//                            "Description    : ${asset.asset?.description ?: "-"}",
+//                            fontSize = 12.sp
+//                        )
+
                         Text(
-                            "Description    : ${asset.asset?.description ?: "-"}",
+                            "Asset Parent   : ${createdAssetDetail.parentAssetId ?: "-"}",
+                            fontSize = 12.sp
+                        )
+
+//                        Text(
+//                            "Status : ${asset.asset?.status ?: "-"}",
+//                            fontSize = 12.sp
+//                        )
+
+                        Text(
+                            "Geometry Type   : $assetDetailGeometryType",
                             fontSize = 12.sp
                         )
 
                         Text(
-                            "Asset Parent   : ${asset.parentAssetId ?: "-"}",
-                            fontSize = 12.sp
-                        )
-
-                        Text(
-                            "Status : ${asset.asset?.status ?: "-"}",
-                            fontSize = 12.sp
-                        )
-
-                        Text(
-                            "Geometry Type   : $geometryType",
-                            fontSize = 12.sp
-                        )
-
-                        Text(
-                            "WKT : ${asset.assetGeometry?.wkt ?: "-"}",
+                            "WKT    : ${asset.data?.get("wkt")?.asString ?: "-"}",
                             fontSize = 12.sp
                         )
                     }
@@ -1242,7 +1567,7 @@ fun AssetDetailsDialog(
                             modifier = Modifier.height(12.dp)
                         )
 
-                        asset.data?.forEach { (key, value) ->
+                        createdAssetDetail.data?.forEach { (key, value) ->
 
                             Row(
                                 modifier = Modifier
