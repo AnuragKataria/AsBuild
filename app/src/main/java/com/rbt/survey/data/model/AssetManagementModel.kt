@@ -64,7 +64,7 @@ data class CreatedAssetDetailResponse(
 )
 
 data class CreatedAssetDetailsData(
-    val portUtilization: List<Any> = emptyList(),
+    val portUtilization: List<PortUtilization> = emptyList(),
     val coreUtilization: List<Any> = emptyList(),
     val assetDynamicFieldValueId: Int,
     val assetId: Int,
@@ -396,4 +396,103 @@ data class CreatedAssetData(
     val assetTypeId: Int,
     val assetCode: String,
     val data: Map<String, JsonElement>?,
+)
+
+
+data class LocationKey(
+    val lat: Double,
+    val lng: Double
+)
+
+
+data class CustomerResponse(
+    val customerId: Int,
+    val customerName: String,
+    val companyName: String,
+    val customerType: String,
+    val status: String,
+    val entryOn: String,
+    val updatedOn: String?,
+    val updatedBy: String
+)
+
+
+data class FmsPortUtilizationResponse(
+    val utilizationStatus: String?,
+    val terminationId: Int?,
+    val pairId: Int?,
+    val pairedCoreId: Int?,
+    val pairNo: Int?,
+    val portId: Int?,
+    val assetId: Int?,
+    val portNo: Int?,
+    val portType: String?,
+    val status: String?,
+    val healthStatus: String?,
+    val createdOn: String?,
+    val updatedOn: String?
+)
+
+
+
+data class FiberStructureResponse(
+    val fiberAssetId: Int?,
+    val tubes: List<FiberTubeStructure>?
+)
+
+data class FiberTubeStructure(
+    val tubeId: Int?,
+    val tubeNo: Int?,
+    val hexCode: String?,
+    val status: String?,
+    val createdOn: String?,
+    val cores: List<FiberCoreStructure>?
+)
+
+data class FiberCoreStructure(
+    val coreId: Int?,
+    val coreNo: Int?,
+    val hexCode: String?,
+    val status: String?,
+    val createdOn: String?
+)
+
+
+
+data class FiberCoreUtilizationResponse(
+    val coreId: Int?,
+    val tubeId: Int?,
+    val tubeNo: Int?,
+    val coreNo: Int?,
+    val cableEndId: Int?,
+    val cableEndCode: String?,
+    val attachedAssetId: Int?,
+    val coreStatus: String?,
+    val utilizationStatus: String?,
+    val spliceId: Int?,
+    val terminationId: Int?,
+    val utilizationType: String?,
+    val pairId: Int?,
+    val pairedCoreId: Int?,
+    val pairedPortId: Int?,
+    val pairNo: Int?,
+    val pairSide: String?
+)
+
+
+
+data class PortUtilization(
+    val utilizationStatus: String?,
+    val terminationId: Int?,
+    val pairId: Int?,
+    val pairedCoreId: Int?,
+    val pairNo: Int?,
+    val portId: Int?,
+    val assetId: Int?,
+    val portNo: Int?,
+    val portType: String?,
+    val status: String?,
+    val healthStatus: String?,
+    val createdOn: String?,
+    val updatedOn: String?
 )

@@ -6,6 +6,9 @@ import com.google.gson.JsonObject
 import com.rbt.survey.data.model.*
 import com.rbt.survey.data.remote.AssetApi
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import retrofit2.Response
 
 class AssetRepository (
@@ -163,4 +166,49 @@ class AssetRepository (
     suspend fun exportPdf(
         assetId: Int
     ) = apiService.exportPdf(assetId)
+
+    suspend fun getcustomers(): List<CustomerResponse> {
+        return apiService.getcustomers()
+    }
+
+
+    suspend fun getFmsUtilization(
+        assetId: Int
+    ): List<FmsPortUtilizationResponse> {
+        return apiService.getFmsUtilization(assetId)
+    }
+
+    suspend fun getFiberCoreStructure(
+        assetId: Int
+    ): FiberStructureResponse {
+        return apiService.getFiberCoreStructure(assetId)
+    }
+
+    suspend fun getFiberCoreUtilization(
+        assetId: Int
+    ): List<FiberCoreUtilizationResponse> {
+        return apiService.getFiberCoreUtilization(assetId)
+    }
+
+    suspend fun createTermination(
+        request: JSONObject
+    ): Response<Unit> {
+
+        val body = request.toString()
+            .toRequestBody("application/json".toMediaType())
+
+        return apiService.createTermination(body)
+    }
+
+    suspend fun updatePortHealthStatus(
+        request: JSONObject
+    ): Response<Unit> {
+
+        val body = request.toString()
+            .toRequestBody("application/json".toMediaType())
+
+        return apiService.updatePortHealthStatus(body)
+    }
+
+
 }

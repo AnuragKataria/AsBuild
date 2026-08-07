@@ -23,6 +23,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.google.maps.android.compose.MapType
+import okhttp3.RequestBody
+import org.json.JSONObject
 
 class InventoryMapViewModel(
     private val repository: AssetRepository
@@ -50,8 +52,22 @@ class InventoryMapViewModel(
     val createdAssetDetails: StateFlow<CreatedAssetDetailsData?> = _createdAssetDetails
 
     private val _assetConfig = MutableStateFlow<AssetConfigResponse?>(null)
-
     val assetConfig = _assetConfig.asStateFlow()
+
+    private val _customers = MutableStateFlow<List<CustomerResponse>>(emptyList())
+    val customers: StateFlow<List<CustomerResponse>> = _customers
+
+    private val _fmsutilization = MutableStateFlow<List<FmsPortUtilizationResponse>>(emptyList())
+    val fmsutilization = _fmsutilization.asStateFlow()
+
+    private val _fibercorestructure = MutableStateFlow<FiberStructureResponse?>(null)
+    val fibercorestructure: StateFlow<FiberStructureResponse?> = _fibercorestructure
+
+    private val _fibercoreutilization = MutableStateFlow<List<FiberCoreUtilizationResponse>>(emptyList())
+    val fibercoreutilization: StateFlow<List<FiberCoreUtilizationResponse>> = _fibercoreutilization
+
+    private val _terminationResult = MutableStateFlow<String?>(null)
+    val terminationResult = _terminationResult.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -468,6 +484,125 @@ class InventoryMapViewModel(
             System.currentTimeMillis().toInt(),
             notification
         )
+    }
+
+
+    fun loadcustomers() {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _isLoadingmessage.value = "Fetching Customers"
+                _customers.value = repository.getcustomers()
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun loadFMSUtilization(assetId: Int) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _isLoadingmessage.value = "Fetching FMS Utilization"
+                _fmsutilization.value = repository.getFmsUtilization(assetId)
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun loadFiberCoreStructure(assetId: Int) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _isLoadingmessage.value = "Fetching Fibercore Structure"
+                _fibercorestructure.value = repository.getFiberCoreStructure(assetId)
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun loadFiberCoreUtilization(assetId: Int) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _isLoadingmessage.value = "Fetching Fibercore Utilization"
+                _fibercoreutilization.value = repository.getFiberCoreUtilization(assetId)
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun clearFMSandFiberUtilization() {
+        _fmsutilization.value = emptyList()
+        _fibercorestructure.value = null
+        _fibercoreutilization.value = emptyList()
+    }
+
+    fun createTermination(request: JSONObject) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _isLoadingmessage.value = "Creating Termination"
+                val result =
+                    repository.createTermination(request)
+                if (result.isSuccessful) {
+                    _terminationResult.value =
+                        "SUCCESS"
+                    Log.d(
+                        "TERMINATION",
+                        "Created Successfully"
+                    )
+
+                } else {
+                    _terminationResult.value =
+                        result.errorBody()?.string()
+                            ?: "Unknown Error"
+                    Log.e(
+                        "TERMINATION",
+                        result.errorBody()?.string() ?: "Unknown Error"
+                    )
+                }
+
+
+            } catch (e: Exception) {
+                _terminationResult.value =
+                    e.message ?: "Something went wrong"
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun updatePortHealthStatus(request: JSONObject,assetId: Int,onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _isLoadingmessage.value = "Updating Port Status"
+                repository.updatePortHealthStatus(request)
+                loadCreatedAssetDetails(assetId)
+                onSuccess()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
     }
 
 }

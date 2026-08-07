@@ -45,8 +45,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -75,23 +73,37 @@ import com.rbt.survey.data.model.*
 import kotlin.text.clear
 import android.util.Log
 import android.util.TypedValue
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import androidx.compose.ui.window.Dialog
 import coil.ImageLoader
 import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.clustering.Clustering
 import com.rbt.survey.R
+import com.rbt.survey.data.local.UserPreferences
 import com.rbt.survey.data.remote.RetrofitClient
 import com.rbt.survey.ui.map.MapTypeItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlin.math.floor
+import org.json.JSONArray
+import org.json.JSONObject
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -114,6 +126,11 @@ fun InventoryMapScreen(
     val assetConfig by viewModel.assetConfig.collectAsState()
     val saveMessage by viewModel.saveMessage.collectAsState()
     val mapType by viewModel.mapType.collectAsState()
+    val customers by viewModel.customers.collectAsState()
+    val fmsUtilization by viewModel.fmsutilization.collectAsState()
+    val fibercoreStructure by viewModel.fibercorestructure.collectAsState()
+    val fibercoreUtilization by viewModel.fibercoreutilization.collectAsState()
+    val terminationResult by viewModel.terminationResult.collectAsState()
 
     var selectedProject by remember { mutableStateOf<ProjectResponse?>(null) }
     var selectedAsset by remember { mutableStateOf<AssetDetailResponse?>(null) }
@@ -137,21 +154,19 @@ fun InventoryMapScreen(
     val createdAssetMarkers = remember { mutableStateListOf<Pair<LatLng, CreatedAssetData>>() }
     val createdAssetPolylines = remember { mutableStateListOf<Pair<List<LatLng>, CreatedAssetData>>() }
 
-    val fusedLocationClient = remember {
-        LocationServices.getFusedLocationProviderClient(context)
-    }
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    val allClusterItems = remember {
-        mutableStateListOf<AssetClusterItem>()
-    }
+    val allClusterItems = remember { mutableStateListOf<AssetClusterItem>() }
+    val assetsByLocation = remember { mutableStateMapOf<LocationKey, List<CreatedAssetData>>() }
+    var showLocationAssetsDialog by remember { mutableStateOf(false) }
+    var sameLocationAssets by remember { mutableStateOf<List<CreatedAssetData>>(emptyList()) }
 
-    val visibleClusterItems = remember {
-        mutableStateListOf<AssetClusterItem>()
-    }
+    val visibleClusterItems = remember { mutableStateListOf<AssetClusterItem>() }
+    var mapLoading by remember { mutableStateOf(false) }
 
-    var mapLoading by remember {
-        mutableStateOf(false)
-    }
+    var showTerminationDialog by remember { mutableStateOf(false) }
+    var selectedLocationAssets by remember { mutableStateOf<List<CreatedAssetData>>(emptyList()) }
+    var userEmail by remember { mutableStateOf("") }
 
 
     var assetName by remember { mutableStateOf("") }
@@ -203,6 +218,12 @@ fun InventoryMapScreen(
         locationError = false
         attributeValues.clear()
         dropdownSnapshots.clear()
+    }
+
+    LaunchedEffect(Unit) {
+        userEmail = UserPreferences(context)
+            .userEmail
+            .first() ?: ""
     }
 
     LaunchedEffect(Unit) {
@@ -276,90 +297,15 @@ fun InventoryMapScreen(
 
     LaunchedEffect(createdAssets) {
 
-        Log.d(
-            "ASSETS_COUNT",
-            createdAssets.size.toString()
-        )
-    }
-
-//    LaunchedEffect(createdAssets) {
-//
-//        createdAssets.forEach { asset ->
-//
-//            val wkt = asset.data
-//                ?.get("wkt")
-//                ?.takeIf { !it.isJsonNull }
-//                ?.asString
-//                ?: return@forEach
-//
-//            when {
-//
-//                wkt.startsWith("POINT", true) -> {
-//
-//                    val coords = wkt
-//                        .substringAfter("(")
-//                        .substringBefore(")")
-//                        .trim()
-//                        .split(" ")
-//
-//                    if (coords.size >= 2) {
-//
-//                        createdAssetMarkers.add(
-//                            Pair(
-//                                LatLng(
-//                                    coords[1].toDouble(),
-//                                    coords[0].toDouble()
-//                                ),
-//                                asset
-//                            )
-//                        )
-//                    }
-//                }
-//
-//                wkt.startsWith("LINESTRING", true) -> {
-//
-//                    val points = wkt
-//                        .substringAfter("(")
-//                        .substringBefore(")")
-//                        .split(",")
-//
-//                    val latLngs = points.mapNotNull { point ->
-//
-//                        val coords = point.trim().split(" ")
-//
-//                        if (coords.size >= 2) {
-//
-//                            LatLng(
-//                                coords[1].toDouble(),
-//                                coords[0].toDouble()
-//                            )
-//
-//                        } else {
-//                            null
-//                        }
-//                    }
-//
-//                    if (latLngs.isNotEmpty()) {
-//                        createdAssetPolylines.add(
-//                            Pair(
-//                                latLngs,
-//                                asset
-//                            )
-//                        )
-//                    }
-//                }
-//            }
-//        }
-//    }
-
-    LaunchedEffect(createdAssets) {
-
         val result = withContext(Dispatchers.Default) {
 
             val pointItems = mutableListOf<AssetClusterItem>()
 
             val polylines =
                 mutableListOf<Pair<List<LatLng>, CreatedAssetData>>()
+
+            val groupedAssets =
+                mutableMapOf<LocationKey, MutableList<CreatedAssetData>>()
 
             createdAssets.forEach { asset ->
 
@@ -393,6 +339,15 @@ fun InventoryMapScreen(
                                         asset = asset
                                     )
                                 )
+
+                                val key = LocationKey(
+                                    lat = truncateTo5Decimals(coords[1].toDouble()),
+                                    lng = truncateTo5Decimals(coords[0].toDouble())
+                                )
+
+                                groupedAssets
+                                    .getOrPut(key) { mutableListOf() }
+                                    .add(asset)
                             }
                         }
                     }
@@ -425,6 +380,17 @@ fun InventoryMapScreen(
 
                             if (latLngs.isNotEmpty()) {
 
+                                val startPoint = latLngs.first()
+
+                                val key = LocationKey(
+                                    lat = truncateTo5Decimals(startPoint.latitude),
+                                    lng = truncateTo5Decimals(startPoint.longitude)
+                                )
+
+                                groupedAssets
+                                    .getOrPut(key) { mutableListOf() }
+                                    .add(asset)
+
                                 polylines.add(
                                     Pair(
                                         latLngs,
@@ -437,7 +403,14 @@ fun InventoryMapScreen(
                 }
             }
 
-            Pair(pointItems, polylines)
+            val finalGroupedAssets =
+                groupedAssets.mapValues { it.value.toList() }
+
+            Triple(
+                pointItems,
+                polylines,
+                finalGroupedAssets
+            )
         }
 
         allClusterItems.clear()
@@ -445,6 +418,9 @@ fun InventoryMapScreen(
 
         createdAssetPolylines.clear()
         createdAssetPolylines.addAll(result.second)
+
+        assetsByLocation.clear()
+        assetsByLocation.putAll(result.third)
     }
 
     LaunchedEffect(cameraPositionState, allClusterItems.size) {
@@ -486,6 +462,31 @@ fun InventoryMapScreen(
             )
 
             mapLoading = false
+        }
+    }
+
+    LaunchedEffect(terminationResult) {
+
+        terminationResult?.let { result ->
+
+            if (result == "SUCCESS") {
+
+                Toast.makeText(
+                    context,
+                    "Termination Created Successfully",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                showTerminationDialog = false
+
+            } else {
+
+                Toast.makeText(
+                    context,
+                    result,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
@@ -615,71 +616,75 @@ fun InventoryMapScreen(
                             width = 8f
                         )
                     }
-
-//                    createdAssetMarkers.forEach { (point, asset) ->
-//
-//                        val bitmap = remember(asset.assetId) {
-//
-//                            createLabeledSquareMarker(
-//                                text = asset.assetId.toString(),
-//                                squareColor = android.graphics.Color.RED,
-//                                squareSize = 25,
-//                                textSizeSp = 10f,
-//                                textColor = android.graphics.Color.BLACK,
-//                                context = context
-//                            )
-//                        }
-//
-//                        Marker(
-//                            state = rememberMarkerState(
-//                                position = point
-//                            ),
-//                            icon = BitmapDescriptorFactory.fromBitmap(bitmap),
-//                            onClick = {
-//                                viewModel.loadAssetDetails(asset.assetTypeId)
-//                                viewModel.loadCreatedAssetDetails(asset.assetId)
-//                                selectedMarkerAsset = asset
-//                                markerAssetDialog = true
-//                                true
-//                            }
-//                        )
-//                    }
-
                     Clustering(
                         items = visibleClusterItems,
                         clusterItemContent = { item ->
+                            val key = LocationKey(
+                                lat = truncateTo5Decimals(item.position.latitude),
+                                lng = truncateTo5Decimals(item.position.longitude)
+                            )
+
+                            val assets = assetsByLocation[key].orEmpty()
+
+                            val label = assets
+                                .mapNotNull {
+                                    it.data?.get("assetName")?.asString
+                                }
+                                .distinct()
+                                .joinToString("/")
+
+                            val isElectricPole =
+                                item.asset.assetTypeId == 43
 
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
 
                                 Text(
-                                    text = item.asset.assetId.toString(),
+                                    text = label,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.Black
                                 )
+                                if (isElectricPole) {
 
-                                Box(
-                                    modifier = Modifier
-                                        .size(16.dp)
-                                        .background(Color.Red)
-                                )
+                                    Image(
+                                        painter = painterResource(
+                                            R.drawable.electric_pole
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(35.dp)
+                                    )
+
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .background(Color.Red)
+                                    )
+                                }
                             }
                         },
                         onClusterItemClick = { item ->
 
-                            viewModel.loadAssetDetails(
-                                item.asset.assetTypeId
+                            val key = LocationKey(
+                                lat = truncateTo5Decimals(item.position.latitude),
+                                lng = truncateTo5Decimals(item.position.longitude)
                             )
 
-                            viewModel.loadCreatedAssetDetails(
-                                item.asset.assetId
-                            )
+                            val assets =
+                                assetsByLocation[key].orEmpty()
 
-                            selectedMarkerAsset = item.asset
+                            if (assets.size <= 1) {
+                                viewModel.loadAssetDetails(item.asset.assetTypeId)
+                                viewModel.loadCreatedAssetDetails(item.asset.assetId)
+                                selectedMarkerAsset = item.asset
+                                markerAssetDialog = true
 
-                            markerAssetDialog = true
+                            } else {
+                                sameLocationAssets = assets
+                                showLocationAssetsDialog = true
+                            }
 
                             true
                         }
@@ -1194,6 +1199,39 @@ fun InventoryMapScreen(
                 }
             }
         }
+        if (showTerminationDialog) {
+
+//            viewModel.loadcustomers()
+
+            AddTerminationDialog(
+                locationAssets = selectedLocationAssets,
+//                customers = customers,
+                fmsUtilization = fmsUtilization,
+                fiberCoreStructure = fibercoreStructure,
+                fiberCoreUtilization = fibercoreUtilization,
+                onFmsSelected = { assetId ->
+                    viewModel.loadFMSUtilization(assetId)
+                },
+                onFiberSelected = { assetId ->
+                    viewModel.loadFiberCoreStructure(assetId)
+                    viewModel.loadFiberCoreUtilization(assetId)
+                },
+                onClose = {
+                    viewModel.clearFMSandFiberUtilization()
+                    showTerminationDialog = false
+                },
+                onCreateTermination = { json ->
+                    json.put("createdBy", userEmail)
+
+                    Log.d(
+                        "TERMINATION_JSON",
+                        json.toString(4)
+                    )
+
+                  viewModel.createTermination(json)
+                }
+            )
+        }
         if (showAssetDialog) {
 
             AlertDialog(
@@ -1302,6 +1340,71 @@ fun InventoryMapScreen(
             )
         }
     }
+    if (showLocationAssetsDialog) {
+
+        AlertDialog(
+            onDismissRequest = {
+                showLocationAssetsDialog = false
+            },
+            title = {
+                Text("Assets at this location")
+            },
+            text = {
+
+                LazyColumn {
+
+                    items(sameLocationAssets) { asset ->
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable {
+
+                                    showLocationAssetsDialog = false
+
+                                    viewModel.loadAssetDetails(
+                                        asset.assetTypeId
+                                    )
+
+                                    viewModel.loadCreatedAssetDetails(
+                                        asset.assetId
+                                    )
+
+                                    selectedMarkerAsset = asset
+
+                                    markerAssetDialog = true
+                                }
+                        ) {
+
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Text(
+                                    text = "Asset ID : ${asset.assetId}"
+                                )
+                                Text(
+                                    text = "Asset Name : ${asset.data?.get("assetName")?.asString}"
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+
+                TextButton(
+                    onClick = {
+                        showLocationAssetsDialog = false
+                    }
+                ) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
     if (
         markerAssetDialog &&
         selectedMarkerAsset != null &&
@@ -1320,6 +1423,54 @@ fun InventoryMapScreen(
                 imageurl = imageurl,
                 assetDetailGeometryType = assetDetailGeometryType,
                 imageLoader = imageLoader,
+                onAddTermination = {
+
+                    val currentAsset = selectedMarkerAsset
+
+                    if (currentAsset != null) {
+
+                        val wkt = currentAsset.data
+                            ?.get("wkt")
+                            ?.asString
+                            ?.trim()
+
+                        if (!wkt.isNullOrBlank()) {
+
+                            val coords = wkt
+                                .substringAfter("(")
+                                .substringBefore(")")
+                                .trim()
+                                .split(Regex("\\s+"))
+
+                            if (coords.size >= 2) {
+
+                                val locationKey = LocationKey(
+                                    lat = truncateTo5Decimals(
+                                        coords[1].toDouble()
+                                    ),
+                                    lng = truncateTo5Decimals(
+                                        coords[0].toDouble()
+                                    )
+                                )
+
+                                val sameLocationAssets =
+                                    assetsByLocation[locationKey] ?: emptyList()
+
+                                selectedLocationAssets = sameLocationAssets
+
+                                Log.d(
+                                    "TERMINATION_DEBUG",
+                                    "Assets Found = ${sameLocationAssets.size}"
+                                )
+                            }
+                        }
+                    }
+                    markerAssetDialog = false
+                    showTerminationDialog = true
+                },
+                onCreateSpliceClosure = {
+
+                },
                 onClose = {
                     markerAssetDialog = false
                 },
@@ -1332,12 +1483,22 @@ fun InventoryMapScreen(
                 onModify = {
 
                 },
+                onPortHealthApply = { json, onSuccess ->
+                    viewModel.updatePortHealthStatus(
+                        json,
+                        selectedMarkerAsset!!.assetId,
+                        onSuccess = {
+                            onSuccess()
+                    })
+
+                }
             )
         }
     }
     if (isLoading) {
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
                 .clickable(
                     enabled = true,
                     indication = null,
@@ -1363,6 +1524,14 @@ fun InventoryMapScreen(
     }
 }
 
+fun truncateTo6Decimals(value: Double): Double {
+    return floor(value * 1_000_000) / 1_000_000
+}
+
+fun truncateTo5Decimals(value: Double): Double {
+    return floor(value * 100_000) / 100_000
+}
+
 @Composable
 fun AssetDetailsDialog(
     asset: CreatedAssetData,
@@ -1370,10 +1539,36 @@ fun AssetDetailsDialog(
     imageurl: String,
     assetDetailGeometryType: String,
     imageLoader: ImageLoader,
+    onAddTermination: () -> Unit,
+    onCreateSpliceClosure: () -> Unit,
     onClose: () -> Unit,
     onExpPdf: () -> Unit,
-    onModify: () -> Unit
+    onModify: () -> Unit,
+    onPortHealthApply: (JSONObject,() -> Unit) -> Unit,
 ) {
+
+    var selectedTab by remember { mutableStateOf(AssetDetailTab.DETAILS) }
+    val hasPortUtilization = createdAssetDetail.portUtilization.isNotEmpty()
+    val hasCoreUtilization = createdAssetDetail.coreUtilization.isNotEmpty()
+    val showTabs = hasPortUtilization || hasCoreUtilization
+    val tabs = buildList {
+        add(AssetDetailTab.DETAILS)
+        if (hasPortUtilization) {
+            add(AssetDetailTab.PORTS)
+            add(AssetDetailTab.HEALTH_STATUS)
+            add(AssetDetailTab.CUSTOMER_MAPPING)
+        }
+        if (hasCoreUtilization) {
+            add(AssetDetailTab.CORES)
+        }
+    }
+    var selectedPortIds by remember {
+        mutableStateOf(setOf<Int>())
+    }
+
+    var selectedHealthStatus by remember {
+        mutableStateOf("")
+    }
 
     Card(
         modifier = Modifier
@@ -1389,8 +1584,8 @@ fun AssetDetailsDialog(
                 Column(
                     modifier = Modifier.padding(16.dp)
                 ) {
-
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
 
@@ -1428,6 +1623,17 @@ fun AssetDetailsDialog(
                                 fontSize = 14.sp
                             )
                         }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        IconButton(
+                            onClick = onClose
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close"
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1438,17 +1644,6 @@ fun AssetDetailsDialog(
                         ),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-
-//                        AssistChip(
-//                            onClick = {},
-//                            label = {
-//                                Text(
-//                                    asset.asset?.status ?: "-",
-//                                    fontSize = 10.sp
-//                                )
-//                            }
-//                        )
-
                         AssistChip(
                             onClick = {},
                             label = {
@@ -1471,134 +1666,263 @@ fun AssetDetailsDialog(
                     }
                 }
 
-                // SCROLLABLE CONTENT
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                // ASSET DETAILS CARD
+            if (showTabs) {
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp)
+                ScrollableTabRow(
+                    selectedTabIndex = tabs.indexOf(selectedTab),
+                    edgePadding = 0.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
 
-                    Text(
-                        text = "ASSET DETAILS",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+                    tabs.forEach { tab ->
 
-                    Column(
-                        modifier = Modifier.padding(start = 16.dp)
-                    ) {
-
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
-
-                        Text(
-                            "Asset ID   : ${asset.assetId}",
-                            fontSize = 12.sp
-                        )
-
-                        Text(
-                            "Asset Name     : ${asset.data?.get("assetName")?.asString ?: "-"}",
-                            fontSize = 12.sp
-                        )
-
-                        Text(
-                            "Asset Code     : ${asset.assetCode}",
-                            fontSize = 12.sp
-                        )
-
-//                        Text(
-//                            "Description    : ${asset.asset?.description ?: "-"}",
-//                            fontSize = 12.sp
-//                        )
-
-                        Text(
-                            "Asset Parent   : ${createdAssetDetail.parentAssetId ?: "-"}",
-                            fontSize = 12.sp
-                        )
-
-//                        Text(
-//                            "Status : ${asset.asset?.status ?: "-"}",
-//                            fontSize = 12.sp
-//                        )
-
-                        Text(
-                            "Geometry Type   : $assetDetailGeometryType",
-                            fontSize = 12.sp
-                        )
-
-                        Text(
-                            "WKT    : ${asset.data?.get("wkt")?.asString ?: "-"}",
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-
-                Spacer(
-                    modifier = Modifier.height(12.dp)
-                )
-
-                // FIELD VALUES CARD
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                ) {
-
-                    Text(
-                        text = "FIELD VALUES",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
-
-                    Column(
-                        modifier = Modifier.padding(start = 16.dp)
-                    ) {
-
-                        Spacer(
-                            modifier = Modifier.height(12.dp)
-                        )
-
-                        createdAssetDetail.data?.forEach { (key, value) ->
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement =
-                                    Arrangement.SpaceBetween
-                            ) {
+                        Tab(
+                            selected = selectedTab == tab,
+                            onClick = {
+                                selectedTab = tab
+                            },
+                            modifier = Modifier.height(40.dp),
+                            text = {
 
                                 Text(
-                                    text = key,
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 12.sp
-                                )
+                                    text = when (tab) {
 
-                                Text(
-                                    text = value.toString()
-                                        .replace("\"", ""),
+                                        AssetDetailTab.DETAILS ->
+                                            "Details"
+
+                                        AssetDetailTab.PORTS ->
+                                            "Ports"
+
+                                        AssetDetailTab.HEALTH_STATUS ->
+                                            "Health Status"
+
+                                        AssetDetailTab.CUSTOMER_MAPPING ->
+                                            "Customer Mapping"
+
+                                        AssetDetailTab.CORES ->
+                                            "Cores"
+                                    },
                                     fontSize = 12.sp
                                 )
                             }
-
-                            HorizontalDivider()
-                        }
+                        )
                     }
                 }
 
-                Spacer(
-                    modifier = Modifier.height(16.dp)
-                )
+                Spacer(modifier = Modifier.height(12.dp))
             }
+
+
+                    Box(
+                        modifier = Modifier.weight(1f)
+                    ) {
+
+                    when (selectedTab) {
+
+                        AssetDetailTab.DETAILS -> {
+
+                            // SCROLLABLE CONTENT
+                            Column(
+                                modifier = Modifier
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                // ASSET DETAILS CARD
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 16.dp)
+                                ) {
+
+                                    Text(
+                                        text = "ASSET DETAILS",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+
+                                    Column(
+                                        modifier = Modifier.padding(start = 16.dp)
+                                    ) {
+
+                                        Spacer(
+                                            modifier = Modifier.height(12.dp)
+                                        )
+
+                                        Text(
+                                            "Asset ID   : ${asset.assetId}",
+                                            fontSize = 12.sp
+                                        )
+
+                                        Text(
+                                            "Asset Name     : ${asset.data?.get("assetName")?.asString ?: "-"}",
+                                            fontSize = 12.sp
+                                        )
+
+                                        Text(
+                                            "Asset Code     : ${asset.assetCode}",
+                                            fontSize = 12.sp
+                                        )
+
+                                        //                        Text(
+                                        //                            "Description    : ${asset.asset?.description ?: "-"}",
+                                        //                            fontSize = 12.sp
+                                        //                        )
+
+                                        Text(
+                                            "Asset Parent   : ${createdAssetDetail.parentAssetId ?: "-"}",
+                                            fontSize = 12.sp
+                                        )
+
+                                        //                        Text(
+                                        //                            "Status : ${asset.asset?.status ?: "-"}",
+                                        //                            fontSize = 12.sp
+                                        //                        )
+
+                                        Text(
+                                            "Geometry Type   : $assetDetailGeometryType",
+                                            fontSize = 12.sp
+                                        )
+
+                                        Text(
+                                            "WKT    : ${asset.data?.get("wkt")?.asString ?: "-"}",
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+
+                                Spacer(
+                                    modifier = Modifier.height(12.dp)
+                                )
+
+                                // FIELD VALUES CARD
+
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp)
+                                ) {
+
+                                    Text(
+                                        text = "FIELD VALUES",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+
+                                    Column(
+                                        modifier = Modifier.padding(start = 16.dp)
+                                    ) {
+
+                                        Spacer(
+                                            modifier = Modifier.height(12.dp)
+                                        )
+
+                                        createdAssetDetail.data?.forEach { (key, value) ->
+
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                horizontalArrangement =
+                                                    Arrangement.SpaceBetween
+                                            ) {
+
+                                                Text(
+                                                    text = key,
+                                                    fontWeight = FontWeight.Medium,
+                                                    fontSize = 12.sp
+                                                )
+
+                                                Text(
+                                                    text = value.toString()
+                                                        .replace("\"", ""),
+                                                    fontSize = 12.sp
+                                                )
+                                            }
+
+                                            HorizontalDivider()
+                                        }
+                                    }
+                                }
+                            }
+
+                        }
+
+                        AssetDetailTab.PORTS -> {
+
+                            // SCROLLABLE CONTENT
+                            Column(
+                                modifier = Modifier
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                PortsTabContent(
+                                    ports = createdAssetDetail.portUtilization
+                                )
+                            }
+                        }
+
+                        AssetDetailTab.HEALTH_STATUS -> {
+
+                            HealthStatusTabContent(
+                                ports = createdAssetDetail.portUtilization,
+                                selectedPortIds = selectedPortIds,
+                                onPortToggle = { portId ->
+
+                                    selectedPortIds =
+                                        if (selectedPortIds.contains(portId)) {
+                                            selectedPortIds - portId
+                                        } else {
+                                            selectedPortIds + portId
+                                        }
+                                },
+                                onSelectAll = {
+
+                                    selectedPortIds =
+                                        if (selectedPortIds.size ==
+                                            createdAssetDetail.portUtilization.size
+                                        ) {
+                                            emptySet()
+                                        } else {
+                                            createdAssetDetail.portUtilization
+                                                .mapNotNull { it.portId }
+                                                .toSet()
+                                        }
+                                },
+                                selectedHealthStatus = selectedHealthStatus,
+                                onHealthStatusChange = {
+                                    selectedHealthStatus = it
+                                },
+                                onPortHealthApply = {
+
+                                    val requestBody = JSONObject().apply {
+                                        put("portIds", JSONArray(selectedPortIds.toList()))
+                                        put("healthStatus", selectedHealthStatus)
+                                    }
+
+                                    onPortHealthApply(requestBody){
+                                        selectedPortIds = emptySet()
+                                        selectedHealthStatus = ""
+                                    }
+
+                                }
+                            )
+                        }
+
+                        AssetDetailTab.CUSTOMER_MAPPING -> {
+
+                            Text(
+                                text = "Customer Mapping",
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+
+                        AssetDetailTab.CORES -> {
+
+                            Text(
+                                text = "Cores Screen",
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+                }
 
             // FIXED BUTTONS AT BOTTOM
 
@@ -1612,13 +1936,34 @@ fun AssetDetailsDialog(
                 horizontalArrangement =
                     Arrangement.spacedBy(8.dp)
             ) {
+                when (asset.assetCode) {
 
-                OutlinedButton(
-                    onClick = onClose,
-//                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Close")
+                    "FMS" -> {
+
+                        Button(
+                            onClick = onAddTermination
+                        ) {
+                            Text("Add Termination")
+                        }
+                    }
+
+                    "SPLICE_CLOSURE" -> {
+
+                        Button(
+                            onClick = {
+                                // Create Splice Closure logic
+                            }
+                        ) {
+                            Text("Create Splice Closure")
+                        }
+                    }
                 }
+//                OutlinedButton(
+//                    onClick = onClose,
+////                    modifier = Modifier.weight(1f)
+//                ) {
+//                    Text("Close")
+//                }
 
                 Button(
                     onClick = onExpPdf,
@@ -1637,6 +1982,477 @@ fun AssetDetailsDialog(
             }
         }
     }
+}
+
+
+@Composable
+fun PortsTabContent(
+    ports: List<PortUtilization>
+) {
+
+    if (ports.isEmpty()) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("No Port Data Available")
+        }
+
+        return
+    }
+
+    Text(
+        text = "PORT UTILIZATION",
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        modifier = Modifier.padding(16.dp)
+    )
+
+    val horizontalScrollState =
+        rememberScrollState()
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+    ) {
+
+        Column {
+            HorizontalDivider()
+
+            // HEADER
+
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(horizontalScrollState)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant
+                    )
+            ) {
+
+                TableCell(
+                    text = "PORT NO",
+                    width = 120.dp,
+                    isHeader = true
+                )
+
+                TableCell(
+                    text = "STATUS",
+                    width = 120.dp,
+                    isHeader = true
+                )
+
+                TableCell(
+                    text = "ATTACHED ASSET",
+                    width = 140.dp,
+                    isHeader = true
+                )
+
+                TableCell(
+                    text = "CONNECTED CORE",
+                    width = 140.dp,
+                    isHeader = true
+                )
+
+                TableCell(
+                    text = "TYPE",
+                    width = 80.dp,
+                    isHeader = true
+                )
+            }
+
+            HorizontalDivider()
+
+            // DATA
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+            ) {
+
+                items(ports) { port ->
+
+                    Row(
+                        modifier = Modifier
+                            .horizontalScroll(
+                                horizontalScrollState
+                            )
+                    ) {
+
+                        TableCell(
+                            text = "Port ${port.portNo ?: "-"}",
+                            width = 120.dp
+                        )
+
+                        TableCell(
+                            text = port.status ?: "-",
+                            width = 120.dp
+                        )
+
+                        TableCell(
+                            text = "-",
+                            width = 140.dp
+                        )
+
+                        TableCell(
+                            text = port.pairedCoreId?.toString()
+                                ?: "-",
+                            width = 140.dp
+                        )
+
+                        TableCell(
+                            text = "-",
+                            width = 80.dp
+                        )
+                    }
+
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HealthStatusTabContent(
+    ports: List<PortUtilization>,
+    selectedPortIds: Set<Int>,
+    onPortToggle: (Int) -> Unit,
+    onSelectAll: () -> Unit,
+    selectedHealthStatus: String,
+    onHealthStatusChange: (String) -> Unit,
+    onPortHealthApply: () -> Unit
+) {
+
+    var expanded by remember {
+        mutableStateOf(false)
+    }
+    val healthOptions = listOf(
+        "Select health status",
+        "LIVE",
+        "FAULTY",
+        "UNKNOWN"
+    )
+
+    if (ports.isEmpty()) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("No Port Health Data Available")
+        }
+
+        return
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+
+        Column {
+            Text(
+                text = "PORT HEALTH STATUS",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(12.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Checkbox(
+                    checked =
+                        selectedPortIds.size == ports.size,
+                    onCheckedChange = {
+                        onSelectAll()
+                    }
+                )
+
+                Text("Select All")
+
+                Spacer(
+                    modifier = Modifier.weight(1f)
+                )
+
+                Text(
+                    "${selectedPortIds.size} of ${ports.size} selected"
+                )
+            }
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(8.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(ports) { port ->
+
+                    PortHealthCard(
+                        port = port,
+                        isSelected =
+                            selectedPortIds.contains(
+                                port.portId ?: -1
+                            ),
+                        onToggle = {
+                            port.portId?.let {
+                                onPortToggle(it)
+                            }
+                        }
+                    )
+                }
+            }
+
+
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = 8.dp,
+                        end = 8.dp,
+                        top = 8.dp,
+                        bottom = 0.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = {
+                        expanded = !expanded
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+
+                    OutlinedTextField(
+                        value = selectedHealthStatus,
+                        onValueChange = {},
+                        readOnly = true,
+                        placeholder = {
+                            Text("Select health status", fontSize = 13.sp)
+                        },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(
+                                expanded = expanded
+                            )
+                        },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = {
+                            expanded = false
+                        }
+                    ) {
+
+                        healthOptions.forEach { status ->
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(status)
+                                },
+                                onClick = {
+
+                                    onHealthStatusChange(status)
+
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                Spacer(
+                    modifier = Modifier.width(8.dp)
+                )
+                Button(
+                    onClick = onPortHealthApply,
+                    enabled =
+                        selectedPortIds.isNotEmpty() &&
+                                selectedHealthStatus.isNotBlank() && selectedHealthStatus != "Select health status"
+                ) {
+                    Text("Apply")
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun PortHealthCard(
+    port: PortUtilization,
+    isSelected: Boolean,
+    onToggle: () -> Unit
+) {
+
+    val utilizationStatus = port.utilizationStatus ?: "UNKNOWN"
+    val healthStatus = port.healthStatus ?: "UNKNOWN"
+
+    val utilizationBg =
+        if (utilizationStatus.equals("FREE", true))
+            Color(0xFFE8F5E9)
+        else
+            Color(0xFFF3E5F5)
+
+    val utilizationText =
+        if (utilizationStatus.equals("FREE", true))
+            Color(0xFF2E7D32)
+        else
+            Color(0xFF8E24AA)
+
+    val healthDotColor = when (healthStatus.uppercase()) {
+        "LIVE" -> Color(0xFF22C55E)
+        "FAULTY" -> Color(0xFFEF4444)
+        else -> Color(0xFF94A3B8)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(110.dp),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(
+            1.dp,
+            Color(0xFFE2E8F0)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(14.dp)
+        ) {
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "Port ${port.portNo}",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1E293B)
+                )
+
+                Spacer(
+                    modifier = Modifier.weight(1f)
+                )
+
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = {
+                        onToggle()
+                    },
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Box(
+                modifier = Modifier
+                    .background(
+                        utilizationBg,
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 4.dp
+                    )
+            ) {
+                Text(
+                    text = utilizationStatus,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = utilizationText
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            healthDotColor,
+                            CircleShape
+                        )
+                )
+
+                Spacer(
+                    modifier = Modifier.width(6.dp)
+                )
+
+                Text(
+                    text = healthStatus.replaceFirstChar {
+                        it.uppercase()
+                    },
+                    fontSize = 11.sp,
+                    color = Color(0xFF475569)
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+fun TableCell(
+    text: String,
+    width: Dp,
+    isHeader: Boolean = false
+) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .width(width)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        fontSize = if (isHeader) 12.sp else 11.sp,
+        fontWeight = if (isHeader) FontWeight.Bold else FontWeight.Normal,
+        maxLines = 1
+    )
+}
+
+@Composable
+fun RowScope.DataCell(
+    text: String,
+    columnWeight: Float
+) {
+
+    Text(
+        text = text,
+        modifier = Modifier
+            .weight(columnWeight)
+            .padding(horizontal = 8.dp),
+        fontSize = 12.sp
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2209,6 +3025,997 @@ fun AttributesCard(
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
+            }
+        }
+    }
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddTerminationDialog(
+    locationAssets: List<CreatedAssetData>,
+//    customers: List<CustomerResponse>,
+    fmsUtilization: List<FmsPortUtilizationResponse>,
+    fiberCoreStructure: FiberStructureResponse?,
+    fiberCoreUtilization: List<FiberCoreUtilizationResponse>,
+    onFmsSelected: (Int) -> Unit,
+    onFiberSelected: (Int) -> Unit,
+    onClose: () -> Unit,
+    onCreateTermination: (JSONObject) -> Unit
+) {
+    val siteAssets = remember(locationAssets) {
+        locationAssets.filter { it.data?.get("assetName")?.asString?.equals("SITE", true) == true }
+    }
+    val fmsAssets = remember(locationAssets) {
+        locationAssets.filter { it.assetCode.equals("FMS", true) }
+    }
+    val fibreAssets = remember(locationAssets) {
+        locationAssets.filter { it.data?.get("assetName")?.asString?.contains("FIBRE", true) == true }
+    }
+    var selectedSite by remember { mutableStateOf(siteAssets.firstOrNull()) }
+    var selectedFms by remember { mutableStateOf<CreatedAssetData?>(null) }
+    var selectedCable by remember { mutableStateOf<CreatedAssetData?>(null) }
+    var fmsExpanded by remember { mutableStateOf(false) }
+    var cableExpanded by remember { mutableStateOf(false) }
+    val siteDirections = listOf("Inbound", "Outbound")
+    var selectedDirection by remember { mutableStateOf("Inbound") }
+    var directionExpanded by remember { mutableStateOf(false) }
+    var customerExpanded by remember { mutableStateOf(false) }
+    var selectedCustomer by remember { mutableStateOf<CustomerResponse?>(null) }
+    val selectedPorts = remember { mutableStateListOf<Int>() }
+    val selectedCores = remember { mutableStateListOf<Int>() }
+
+    val selectedCount = selectedPorts.size
+    val occupiedCount = fmsUtilization.count {
+        it.utilizationStatus.equals("UTILIZED", true)
+    }
+    val faultyCount = fmsUtilization.count {
+        it.healthStatus.equals("FAULTY", true)
+    }
+    val liveCount = fmsUtilization.count {
+        it.healthStatus.equals("LIVE", true)
+    }
+    val availableCount = fmsUtilization.count {
+        !it.utilizationStatus.equals("UTILIZED", true) &&
+                !it.healthStatus.equals("FAULTY", true)
+    }
+    val coreMap = remember(fiberCoreStructure) {
+
+        fiberCoreStructure?.tubes
+            ?.flatMap { tube ->
+
+                tube.cores.orEmpty().map { core ->
+
+                    core.coreId to Triple(
+                        tube.tubeNo ?: 0,
+                        core.coreNo ?: 0,
+                        core
+                    )
+                }
+            }
+            ?.toMap()
+            ?: emptyMap()
+    }
+    val portMap = remember(fmsUtilization) {
+
+        fmsUtilization.associateBy {
+            it.portId
+        }
+    }
+    val pairCount = maxOf(
+        selectedPorts.size,
+        selectedCores.size
+    )
+    val isPairingValid =
+        selectedPorts.isNotEmpty() &&
+                selectedCores.isNotEmpty() &&
+                selectedPorts.size == selectedCores.size
+
+
+
+    var notes by remember { mutableStateOf("") }
+
+    Dialog(
+        onDismissRequest = onClose
+    ) {
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+            ) {
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.SpaceBetween,
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Text(
+                        text = "Create Termination",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    IconButton(
+                        onClick = onClose
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Site Dropdown
+                    OutlinedTextField(
+                        value = selectedSite?.let {
+                            "${it.data?.get("assetName")?.asString} (${it.assetId})"
+                        } ?: "",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = {
+                            Text("Site")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    // FMS Dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = fmsExpanded,
+                        onExpandedChange = {
+                            fmsExpanded = !fmsExpanded
+                        }
+                    ) {
+
+                        OutlinedTextField(
+                            value = selectedFms?.let {
+                                "${it.data?.get("assetName")?.asString} (${it.assetId})"
+                            } ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = {
+                                Text("FMS Asset")
+                            },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = fmsExpanded
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = fmsExpanded,
+                            onDismissRequest = {
+                                fmsExpanded = false
+                            }
+                        ) {
+
+                            fmsAssets.forEach { asset ->
+
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "${asset.data?.get("assetName")?.asString} (${asset.assetId})"
+                                        )
+                                    },
+                                    onClick = {
+
+                                        selectedFms = asset
+                                        fmsExpanded = false
+
+                                        onFmsSelected(asset.assetId)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    // FIber Cable Dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = cableExpanded,
+                        onExpandedChange = {
+                            cableExpanded = !cableExpanded
+                        }
+                    ) {
+
+                        OutlinedTextField(
+                            value = selectedCable?.let {
+                                "${it.data?.get("assetName")?.asString} (${it.assetId})"
+                            } ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = {
+                                Text("Fibre Cable")
+                            },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = cableExpanded
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = cableExpanded,
+                            onDismissRequest = {
+                                cableExpanded = false
+                            }
+                        ) {
+
+                            fibreAssets.forEach { asset ->
+
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            "${asset.data?.get("assetName")?.asString} (${asset.assetId})"
+                                        )
+                                    },
+                                    onClick = {
+
+                                        selectedCable = asset
+                                        cableExpanded = false
+
+                                        onFiberSelected(asset.assetId)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    // Site Direction Dropdown
+
+                    ExposedDropdownMenuBox(
+                        expanded = directionExpanded,
+                        onExpandedChange = {
+                            directionExpanded = !directionExpanded
+                        }
+                    ) {
+
+                        OutlinedTextField(
+                            value = selectedDirection,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = {
+                                Text("Site Direction")
+                            },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = directionExpanded
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = directionExpanded,
+                            onDismissRequest = {
+                                directionExpanded = false
+                            }
+                        ) {
+
+                            siteDirections.forEach { direction ->
+
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(direction)
+                                    },
+                                    onClick = {
+                                        selectedDirection = direction
+                                        directionExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+//                    // Customer Dropdown
+//
+//                    ExposedDropdownMenuBox(
+//                        expanded = customerExpanded,
+//                        onExpandedChange = {
+//                            customerExpanded = !customerExpanded
+//                        }
+//                    ) {
+//
+//                        OutlinedTextField(
+//                            value = selectedCustomer?.customerName ?: "",
+//                            onValueChange = {},
+//                            readOnly = true,
+//                            label = { Text("Customer") },
+//                            trailingIcon = {
+//                                ExposedDropdownMenuDefaults.TrailingIcon(
+//                                    expanded = customerExpanded
+//                                )
+//                            },
+//                            modifier = Modifier
+//                                .fillMaxWidth()
+//                                .menuAnchor()
+//                        )
+//
+//                        ExposedDropdownMenu(
+//                            expanded = customerExpanded,
+//                            onDismissRequest = {
+//                                customerExpanded = false
+//                            }
+//                        ) {
+//
+//                            customers.forEach { customer ->
+//
+//                                DropdownMenuItem(
+//                                    text = {
+//                                        Text(customer.customerName)
+//                                    },
+//                                    onClick = {
+//                                        selectedCustomer = customer
+//                                        customerExpanded = false
+//                                    }
+//                                )
+//                            }
+//                        }
+//                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(12.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp)
+                            ) {
+                                Text(
+                                    text = "FMS Ports (${fmsUtilization.size} Units)",
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                if (fmsUtilization.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+
+                                        StatusChip(
+                                            label = "Selected",
+                                            count = selectedCount,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+
+                                        StatusChip(
+                                            label = "Available",
+                                            count = availableCount,
+                                            color = Color.Black
+                                        )
+
+                                        StatusChip(
+                                            label = "Occupied",
+                                            count = occupiedCount,
+                                            color = Color.Gray
+                                        )
+
+                                        StatusChip(
+                                            label = "Live",
+                                            count = liveCount,
+                                            color = Color(0xFF00C853)
+                                        )
+
+                                        StatusChip(
+                                            label = "Faulty",
+                                            count = faultyCount,
+                                            color = Color.Red
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (fmsUtilization.isEmpty()) {
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 24.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+
+                                        Text(
+                                            text = "Select an FMS asset to view available ports",
+                                            color = Color.Gray,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+
+                                } else {
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(6),
+                                        modifier = Modifier.height(220.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+
+                                        items(
+                                            fmsUtilization,
+                                            key = { it.portId ?: it.portNo ?: 0 }
+                                        ) { port ->
+
+                                            val utilizationStatus =
+                                                port.utilizationStatus?.uppercase() ?: ""
+
+                                            val healthStatus =
+                                                port.healthStatus?.uppercase() ?: ""
+
+                                            val isUtilized =
+                                                utilizationStatus == "UTILIZED"
+
+                                            val isFaulty =
+                                                healthStatus == "FAULTY"
+
+                                            val isLive =
+                                                healthStatus == "LIVE"
+
+                                            val isSelectable =
+                                                !isUtilized && !isFaulty
+
+                                            val portId = port.portId ?: 0
+
+                                            val isSelected =
+                                                selectedPorts.contains(portId)
+
+                                            val selectionNumber =
+                                                selectedPorts.indexOf(portId) + 1
+
+                                            Card(
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .clickable(
+                                                        enabled = isSelectable
+                                                    ) {
+
+                                                        if (selectedPorts.contains(portId)) {
+                                                            selectedPorts.remove(portId)
+                                                        } else {
+                                                            selectedPorts.add(portId)
+                                                        }
+                                                    },
+                                                border = BorderStroke(
+                                                    1.dp,
+                                                    if (isSelected)
+                                                        MaterialTheme.colorScheme.primary
+                                                    else
+                                                        Color.Gray.copy(alpha = 0.4f)
+                                                ),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor = when {
+                                                        isSelected -> MaterialTheme.colorScheme.primary
+                                                        isUtilized -> Color.LightGray
+                                                        isFaulty -> Color.LightGray
+                                                        else -> Color.White
+                                                    }
+                                                )
+                                            ) {
+
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize()
+                                                ) {
+
+                                                    // Selection Number Badge
+                                                    if (selectionNumber > 0) {
+
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .align(Alignment.TopEnd)
+                                                                .size(16.dp)
+                                                                .background(
+                                                                    MaterialTheme.colorScheme.primary,
+                                                                    CircleShape
+                                                                ),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+
+                                                            Text(
+                                                                text = selectionNumber.toString(),
+                                                                color = Color.White,
+                                                                fontSize = 10.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+
+                                                    // Status Dot
+                                                    else if (isLive || isFaulty) {
+
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .align(Alignment.TopEnd)
+                                                                .padding(1.dp)
+                                                                .size(14.dp)
+                                                                .background(
+                                                                    if (isLive)
+                                                                        Color(0xFF00C853)
+                                                                    else
+                                                                        Color.Red,
+                                                                    CircleShape
+                                                                )
+                                                                .border(
+                                                                    1.dp,
+                                                                    Color.White,
+                                                                    CircleShape
+                                                                )
+                                                        )
+                                                    }
+
+                                                    Text(
+                                                        text = port.portNo?.toString() ?: "-",
+                                                        modifier = Modifier.align(Alignment.Center),
+                                                        color =
+                                                            if (isSelected)
+                                                                Color.White
+                                                            else
+                                                                Color.Black,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(12.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.weight(1f)
+                        ) {
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            ) {
+
+                                Text(
+                                    text = "Fibre Cores",
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (fiberCoreStructure == null ||
+                                    fiberCoreStructure.tubes?.isEmpty() == true
+                                ) {
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+
+                                        Text(
+                                            text = "Select a fibre cable first",
+                                            color = Color.Gray
+                                        )
+                                    }
+
+                                } else {
+
+                                    Column(
+                                        modifier = Modifier
+                                            .heightIn(max = 400.dp)
+                                            .verticalScroll(rememberScrollState()),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+
+                                        fiberCoreStructure.tubes?.forEach { tube ->
+
+                                            TubeCard(
+                                                tube = tube,
+                                                selectedCores = selectedCores
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+
+                        Column(
+                            modifier = Modifier.padding(12.dp)
+                        ) {
+
+                            Text(
+                                text = "Pairing Preview",
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(
+                                modifier = Modifier.height(12.dp)
+                            )
+
+                            if (pairCount == 0) {
+
+                                Text(
+                                    text = "Select FMS ports and Fibre cores",
+                                    color = Color.Gray
+                                )
+
+                            } else {
+
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+
+                                    if (!isPairingValid &&
+                                        (selectedPorts.isNotEmpty() || selectedCores.isNotEmpty())
+                                    ) {
+                                        Text(
+                                            text = when {
+
+                                                selectedPorts.size > selectedCores.size ->
+                                                    "Please select ${selectedPorts.size - selectedCores.size} more fibre core(s)"
+
+                                                selectedCores.size > selectedPorts.size ->
+                                                    "Please select ${selectedCores.size - selectedPorts.size} more FMS port(s)"
+
+                                                else ->
+                                                    "Ports and Fibre cores count must match"
+                                            },
+                                            color = Color.Red,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+
+                                    repeat(pairCount) { index ->
+
+                                        val portId =
+                                            selectedPorts.getOrNull(index)
+
+                                        val port =
+                                            portId?.let {
+                                                portMap[it]
+                                            }
+
+                                        val coreId =
+                                            selectedCores.getOrNull(index)
+
+                                        val coreInfo =
+                                            coreId?.let {
+                                                coreMap[it]
+                                            }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement =
+                                                Arrangement.SpaceBetween
+                                        ) {
+
+                                            Text(
+                                                text =
+                                                    port?.portNo?.let {
+                                                        "Port $it"
+                                                    } ?: "-"
+                                            )
+
+                                            Text("↔")
+
+                                            Text(
+                                                text =
+                                                    if (coreInfo != null)
+                                                        "T${coreInfo.first}/C${coreInfo.second}"
+                                                    else
+                                                        "-"
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = {
+                            notes = it
+                        },
+                        label = {
+                            Text("Notes")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+
+                Button(
+                    onClick = {
+
+                        val json = JSONObject().apply {
+
+                            put("siteAssetId", selectedSite?.assetId)
+                            put("fmsAssetId", selectedFms?.assetId)
+                            put("fiberAssetId", selectedCable?.assetId)
+                            put("confirmAttachToExistingCircuit", true)
+                            put("siteDirection", selectedDirection.uppercase())
+                            put("notes", notes)
+                            put(
+                                "fmsPortIds",
+                                JSONArray(selectedPorts)
+                            )
+                            put(
+                                "fiberCoreIds",
+                                JSONArray(selectedCores)
+                            )
+                        }
+
+                        onCreateTermination(json)
+                    },
+                    enabled = isPairingValid,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Create Termination")
+                }
+            }
+        }
+
+    }
+}
+
+
+fun String.toComposeColor(): Color {
+    return try {
+        Color(android.graphics.Color.parseColor(this))
+    } catch (e: Exception) {
+        Color.LightGray
+    }
+}
+
+@Composable
+fun StatusChip(
+    label: String,
+    count: Int,
+    color: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = color.copy(alpha = 0.15f),
+        border = BorderStroke(1.dp, color)
+    ) {
+        Text(
+            text = "$label ($count)",
+            modifier = Modifier.padding(
+                horizontal = 12.dp,
+                vertical = 6.dp
+            ),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = color
+        )
+    }
+}
+
+@Composable
+fun TubeCard(
+    tube: FiberTubeStructure,
+    selectedCores: SnapshotStateList<Int>
+) {
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                1.dp,
+                Color.LightGray,
+                RoundedCornerShape(12.dp)
+            )
+            .padding(10.dp)
+    ) {
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            tube.hexCode?.toComposeColor()?.let {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(
+                            it,
+                            CircleShape
+                        )
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = "Tube ${tube.tubeNo}",
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(6),
+            modifier = Modifier.heightIn(max = 300.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            userScrollEnabled = false
+        ) {
+
+            items(
+                tube.cores ?: emptyList(),
+                key = { it.coreId ?: 0 }
+            ) { core ->
+
+                val coreId = core.coreId ?: 0
+                val isFree =
+                    core.status.equals("FREE", true)
+                val isSelected =
+                    selectedCores.contains(coreId)
+
+                val selectionNumber =
+                    selectedCores.indexOf(coreId) + 1
+
+                Box {
+
+                    core.hexCode?.toComposeColor()?.let { coreColor ->
+
+                        Card(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clickable(
+                                    enabled = isFree
+                                ) {
+
+                                    if (isSelected) {
+                                        selectedCores.remove(coreId)
+                                    } else {
+                                        selectedCores.add(coreId)
+                                    }
+                                },
+                            colors = CardDefaults.cardColors(
+                                containerColor = when {
+                                    isSelected ->
+                                        MaterialTheme.colorScheme.primary
+
+                                    isFree ->
+                                        coreColor
+
+                                    else ->
+                                        Color.LightGray
+                                }
+                            ),
+                            border = BorderStroke(
+                                if (isSelected) 2.dp else 1.dp,
+                                when {
+                                    isSelected ->
+                                        MaterialTheme.colorScheme.primary
+
+                                    isFree ->
+                                        Color.Gray
+
+                                    else ->
+                                        Color.DarkGray
+                                }
+                            )
+                        ) {
+
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+
+                                Text(
+                                    text = core.coreNo?.toString() ?: "-",
+                                    color =
+                                        if (
+                                            core.hexCode.equals(
+                                                "#FFFFFF",
+                                                true
+                                            )
+                                        )
+                                            Color.Black
+                                        else
+                                            Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    if (selectionNumber > 0) {
+
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(1.dp)
+                                .size(14.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BasicText(
+                                text = selectionNumber.toString(),
+                                style = TextStyle(
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -3007,4 +4814,12 @@ fun createLabeledSquareMarker(
     canvas.drawRect(squareLeft, squareTop, squareRight, squareBottom, squarePaint)
 
     return bitmap
+}
+
+enum class AssetDetailTab {
+    DETAILS,
+    PORTS,
+    HEALTH_STATUS,
+    CUSTOMER_MAPPING,
+    CORES
 }

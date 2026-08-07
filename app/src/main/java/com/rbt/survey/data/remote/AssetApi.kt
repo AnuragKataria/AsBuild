@@ -112,4 +112,33 @@ interface AssetApi {
     suspend fun exportPdf(
         @Path("assetId") assetId: Int
     ): Response<ResponseBody>
+
+    @GET("customers")
+    suspend fun getcustomers(): List<CustomerResponse>
+
+    @GET("assets/{assetId}/fms-ports/utilization")
+    suspend fun getFmsUtilization(
+        @Path("assetId") assetId: Int
+    ): List<FmsPortUtilizationResponse>
+
+    @GET("assets/{assetId}/fiber-structure")
+    suspend fun getFiberCoreStructure(
+        @Path("assetId") assetId: Int
+    ): FiberStructureResponse
+
+
+    @GET("assets/{assetId}/fiber-structure/cores/utilization")
+    suspend fun getFiberCoreUtilization(
+        @Path("assetId") assetId: Int
+    ): List<FiberCoreUtilizationResponse>
+
+    @POST("fiber-terminations")
+    suspend fun createTermination(
+        @Body request: RequestBody
+    ): Response<Unit>
+
+    @POST("fiber-terminations/ports/health-status")
+    suspend fun updatePortHealthStatus(
+        @Body request: RequestBody
+    ): Response<Unit>
 }
