@@ -65,7 +65,7 @@ data class CreatedAssetDetailResponse(
 
 data class CreatedAssetDetailsData(
     val portUtilization: List<PortUtilization> = emptyList(),
-    val coreUtilization: List<Any> = emptyList(),
+    val coreUtilization: List<CoreUtilization> = emptyList(),
     val assetDynamicFieldValueId: Int,
     val assetId: Int,
     val projectId: Int,
@@ -405,6 +405,29 @@ data class LocationKey(
 )
 
 
+data class CustomerMappingResponse(
+    val portId: Int?,
+    val assetId: Int?,
+    val portNo: Int?,
+    val portType: String?,
+    val portHealthStatus: String?,
+    val portUtilizationStatus: String?,
+    val tubeId: Int?,
+    val tubeNo: Int?,
+    val tubeHexCode: String?,
+    val tubeAssetId: Int?,
+    val coreId: Int?,
+    val coreNo: Int?,
+    val coreHexCode: String?,
+    val coreColor: String?,
+    val coreAssetId: Int?,
+    val terminationId: Int?,
+    val customer: CustomerResponse?,
+    val createdOn: String?,
+    val updatedOn: String?
+)
+
+
 data class CustomerResponse(
     val customerId: Int,
     val customerName: String,
@@ -495,4 +518,24 @@ data class PortUtilization(
     val healthStatus: String?,
     val createdOn: String?,
     val updatedOn: String?
+)
+
+data class CoreUtilization(
+    val coreId: Int?,
+    val tubeId: Int?,
+    val tubeNo: Int?,
+    val coreNo: Int?,
+    val cableEndId: Int?,
+    val cableEndCode: String?,
+    val attachedAssetId: Int?,
+    val coreStatus: String?,
+    val utilizationStatus: String?,
+    val spliceId: Int?,
+    val terminationId: Int?,
+    val utilizationType: String?,
+    val pairId: Int?,
+    val pairedCoreId: Int?,
+    val pairedPortId: Int?,
+    val pairNo: Int?,
+    val pairSide: String?
 )

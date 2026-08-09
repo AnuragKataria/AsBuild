@@ -42,7 +42,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Add
@@ -80,9 +79,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -104,6 +107,8 @@ import kotlinx.coroutines.flow.first
 import kotlin.math.floor
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,6 +136,8 @@ fun InventoryMapScreen(
     val fibercoreStructure by viewModel.fibercorestructure.collectAsState()
     val fibercoreUtilization by viewModel.fibercoreutilization.collectAsState()
     val terminationResult by viewModel.terminationResult.collectAsState()
+    val customerMappings by viewModel.customerMappings.collectAsState()
+    val updateCustomerMapping by viewModel.customerMappingResponse.collectAsState()
 
     var selectedProject by remember { mutableStateOf<ProjectResponse?>(null) }
     var selectedAsset by remember { mutableStateOf<AssetDetailResponse?>(null) }
@@ -197,6 +204,8 @@ fun InventoryMapScreen(
 
     var selectedMarkerAsset by remember { mutableStateOf<CreatedAssetData?>(null) }
     var markerAssetDialog by remember { mutableStateOf(false) }
+    var showOverwriteDialog by remember { mutableStateOf(false) }
+    var pendingOverwriteRequest by remember { mutableStateOf<JSONObject?>(null) }
 
     val clearAssetForm = {
         selectedAsset = null
@@ -791,8 +800,8 @@ fun InventoryMapScreen(
                             .align(Alignment.TopEnd)
                             .padding(top = 105.dp, end = 10.dp)
                             .size(43.dp),
-                        containerColor = androidx.compose.ui.graphics.Color.White,
-                        contentColor = androidx.compose.ui.graphics.Color.Black
+                        containerColor = Color.White,
+                        contentColor = Color.Black
                     ) {
                         Icon(
                             imageVector = Icons.Default.Layers,
@@ -801,12 +810,12 @@ fun InventoryMapScreen(
                     }
 
                     if (mapexpanded) {
-                        androidx.compose.ui.window.Dialog(
+                        Dialog(
                             onDismissRequest = { mapexpanded = false }
                         ) {
-                            androidx.compose.material3.Surface(
+                            Surface(
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                                color = androidx.compose.ui.graphics.Color.White
+                                color = Color.White
                             ) {
 
                                 Column(
@@ -825,14 +834,14 @@ fun InventoryMapScreen(
                                         Text(
                                             text = "Map Type",
                                             style = MaterialTheme.typography.titleLarge,
-                                            color = androidx.compose.ui.graphics.Color.Black
+                                            color = Color.Black
                                         )
 
                                         IconButton(onClick = { mapexpanded = false }) {
                                             Icon(
                                                 imageVector = Icons.Default.Close,
                                                 contentDescription = "Close",
-                                                tint = androidx.compose.ui.graphics.Color.Black
+                                                tint = Color.Black
                                             )
                                         }
                                     }
@@ -1489,11 +1498,101 @@ fun InventoryMapScreen(
                         selectedMarkerAsset!!.assetId,
                         onSuccess = {
                             onSuccess()
-                    })
+                        })
 
+                },
+                onLoadCustomerMappings = { assetId ->
+                    viewModel.loadCustomerMappings(assetId)
+                    viewModel.loadcustomers()
+
+                },
+                customerMappings = customerMappings,
+                customers = customers,
+                onApplyCustomer = { requestBody ->
+
+                    requestBody.put("updatedBy", userEmail)
+
+                    pendingOverwriteRequest = JSONObject(requestBody.toString())
+
+                    viewModel.updateCustomerPort(
+                        requestBody,
+                        onSuccess = {
+                            Toast.makeText(context, "Customer mapping updated successfully", Toast.LENGTH_SHORT).show()
+                            viewModel.loadCustomerMappings(selectedMarkerAsset!!.assetId)
+                        },
+                        onMapConflict = {
+                            Log.d("CUSTOMER_MAPPING", "Conflict received")
+                            showOverwriteDialog = true
+                        })
+                },
+                onSpliceClosureDiagramDownload = {
+                    viewModel.exportSpliceClosureDiagramPdf(
+                        assetId = selectedMarkerAsset!!.assetId,
+                        context = context
+                    )
                 }
             )
         }
+    }
+    if (showOverwriteDialog) {
+
+        AlertDialog(
+            onDismissRequest = {
+                showOverwriteDialog = false
+            },
+            title = {
+                Text("Customer Already Mapped")
+            },
+            text = {
+                Text(
+                    "This port is already mapped to another customer. Do you want to overwrite the existing mapping?"
+                )
+            },
+            dismissButton = {
+
+                OutlinedButton(
+                    onClick = {
+                        showOverwriteDialog = false
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            },
+            confirmButton = {
+
+                Button(
+                    onClick = {
+
+                        showOverwriteDialog = false
+
+                        pendingOverwriteRequest?.let { request ->
+
+                            request.put(
+                                "overwriteCustomer",
+                                true
+                            )
+
+                            viewModel.updateCustomerPort(
+                                request,
+                                onSuccess = {
+
+                                    viewModel.loadCustomerMappings(
+                                        selectedMarkerAsset!!.assetId
+                                    )
+
+                                    pendingOverwriteRequest = null
+                                },
+                                onMapConflict = {
+
+                                }
+                            )
+                        }
+                    }
+                ) {
+                    Text("Overwrite")
+                }
+            }
+        )
     }
     if (isLoading) {
         Box(
@@ -1524,10 +1623,6 @@ fun InventoryMapScreen(
     }
 }
 
-fun truncateTo6Decimals(value: Double): Double {
-    return floor(value * 1_000_000) / 1_000_000
-}
-
 fun truncateTo5Decimals(value: Double): Double {
     return floor(value * 100_000) / 100_000
 }
@@ -1545,6 +1640,11 @@ fun AssetDetailsDialog(
     onExpPdf: () -> Unit,
     onModify: () -> Unit,
     onPortHealthApply: (JSONObject,() -> Unit) -> Unit,
+    onLoadCustomerMappings: (Int) -> Unit,
+    customerMappings: List<CustomerMappingResponse>,
+    customers: List<CustomerResponse>,
+    onApplyCustomer: (JSONObject) -> Unit,
+    onSpliceClosureDiagramDownload: () -> Unit
 ) {
 
     var selectedTab by remember { mutableStateOf(AssetDetailTab.DETAILS) }
@@ -1702,7 +1802,7 @@ fun AssetDetailsDialog(
                                         AssetDetailTab.CORES ->
                                             "Cores"
                                     },
-                                    fontSize = 12.sp
+                                    fontSize = 14.sp
                                 )
                             }
                         )
@@ -1762,20 +1862,10 @@ fun AssetDetailsDialog(
                                             fontSize = 12.sp
                                         )
 
-                                        //                        Text(
-                                        //                            "Description    : ${asset.asset?.description ?: "-"}",
-                                        //                            fontSize = 12.sp
-                                        //                        )
-
                                         Text(
                                             "Asset Parent   : ${createdAssetDetail.parentAssetId ?: "-"}",
                                             fontSize = 12.sp
                                         )
-
-                                        //                        Text(
-                                        //                            "Status : ${asset.asset?.status ?: "-"}",
-                                        //                            fontSize = 12.sp
-                                        //                        )
 
                                         Text(
                                             "Geometry Type   : $assetDetailGeometryType",
@@ -1792,6 +1882,94 @@ fun AssetDetailsDialog(
                                 Spacer(
                                     modifier = Modifier.height(12.dp)
                                 )
+
+                                if(asset.assetCode == "SPLICE_CLOSURE"){
+
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp, end = 16.dp)
+                                    ) {
+
+                                        Text(
+                                            text = "SPLICE CLOSURE DIAGRAM",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp
+                                        )
+
+                                        Spacer(
+                                            modifier = Modifier.height(12.dp)
+                                        )
+
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp),
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = Color.White
+                                            ),
+                                            elevation = CardDefaults.cardElevation(
+                                                defaultElevation = 2.dp
+                                            ),
+                                            onClick = {
+                                                onSpliceClosureDiagramDownload()
+                                            }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(48.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .background(Color(0xFFF1F4FF)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Description,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF5B6CFF)
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.width(12.dp))
+
+                                                Column(
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+
+                                                    Text(
+                                                        text = "Download Splice Closure Diagram",
+                                                        fontSize = 14.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(0xFF344054)
+                                                    )
+                                                }
+
+                                                IconButton(
+                                                    onClick = {
+                                                        onSpliceClosureDiagramDownload()
+                                                    }
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.FileDownload,
+                                                        contentDescription = "Download",
+                                                        tint = Color(0xFFCBD5E1)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(
+                                        modifier = Modifier.height(12.dp)
+                                    )
+                                }
 
                                 // FIELD VALUES CARD
 
@@ -1908,18 +2086,36 @@ fun AssetDetailsDialog(
 
                         AssetDetailTab.CUSTOMER_MAPPING -> {
 
-                            Text(
-                                text = "Customer Mapping",
-                                modifier = Modifier.padding(16.dp)
+                            onLoadCustomerMappings(asset.assetId)
+                            CustomerMappingTabContent(
+                                mappings = customerMappings,
+                                customers = customers,
+                                onApplyCustomer = { portId, customerId ->
+
+                                    val requestBody = JSONObject().apply {
+
+                                        put("fmsAssetId", asset.assetId)
+                                        put("portId", portId)
+                                        put("customerId", customerId)
+                                        put("overwriteCustomer", false)
+                                    }
+
+                                    onApplyCustomer(requestBody)
+                                }
                             )
                         }
 
                         AssetDetailTab.CORES -> {
 
-                            Text(
-                                text = "Cores Screen",
-                                modifier = Modifier.padding(16.dp)
-                            )
+                            // SCROLLABLE CONTENT
+                            Column(
+                                modifier = Modifier
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                CoresTabContent(
+                                    cores = createdAssetDetail.coreUtilization
+                                )
+                            }
                         }
                     }
                 }
@@ -1982,6 +2178,403 @@ fun AssetDetailsDialog(
             }
         }
     }
+}
+
+@Composable
+fun CustomerMappingTabContent(
+    mappings: List<CustomerMappingResponse>,
+    customers: List<CustomerResponse>,
+    onApplyCustomer: (portId: Int, customerId: Int) -> Unit
+) {
+    var selectedFilter by remember {
+        mutableStateOf("ALL")
+    }
+
+    val mappedCount = mappings.count {
+        it.customer != null
+    }
+
+    val unmappedCount = mappings.count {
+        it.customer == null
+    }
+
+    val filteredMappings = when (selectedFilter) {
+        "MAPPED" -> mappings.filter { it.customer != null }
+        "UNMAPPED" -> mappings.filter { it.customer == null }
+        else -> mappings
+    }
+
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+
+            FilterChip(
+                selected = selectedFilter == "ALL",
+                onClick = {
+                    selectedFilter = "ALL"
+                },
+                label = {
+                    Text("All (${mappings.size})")
+                }
+            )
+
+            FilterChip(
+                selected = selectedFilter == "MAPPED",
+                onClick = {
+                    selectedFilter = "MAPPED"
+                },
+                label = {
+                    Text("Mapped ($mappedCount)")
+                }
+            )
+
+            FilterChip(
+                selected = selectedFilter == "UNMAPPED",
+                onClick = {
+                    selectedFilter = "UNMAPPED"
+                },
+                label = {
+                    Text("Unmapped ($unmappedCount)")
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+
+            items(filteredMappings) { mapping ->
+
+                CustomerPortCard(
+                    mapping = mapping,
+                    customers = customers,
+                    onApplyCustomer = { portId, customerId ->
+                        onApplyCustomer(
+                            portId,
+                            customerId
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CustomerPortCard(
+    mapping: CustomerMappingResponse,
+    customers: List<CustomerResponse>,
+    onApplyCustomer: (portId: Int, customerId: Int) -> Unit
+){
+
+    var isEditing by remember {
+        mutableStateOf(false)
+    }
+
+    var selectedCustomerId by remember {
+        mutableStateOf(mapping.customer?.customerId)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(
+            1.dp,
+            Color(0xFFE2E8F0)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "Port ${mapping.portNo}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = Color.Black
+                )
+
+                if (mapping.portUtilizationStatus != "FREE") {
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    ColorDot(mapping.tubeHexCode)
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    ColorDot(mapping.coreColor)
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Text("Tube ${mapping.tubeNo ?: "-"} Core ${mapping.coreNo ?: "-"}", color = Color.Black)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                AssistChip(
+                    onClick = {},
+                    label = {
+                        Text(mapping.portUtilizationStatus ?: "-", color = Color.Black)
+                    }
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                AssistChip(
+                    onClick = {},
+                    label = {
+                        Text(mapping.portHealthStatus ?: "-", color = Color.Black)
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (mapping.customer != null) {
+
+                Text(
+                    text = mapping.customer.customerName,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.Black
+                )
+
+                Text(
+                    text = "${mapping.customer.customerType} - Since ${formatDate(mapping.customer.entryOn)}",
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+
+            } else {
+
+                if (mapping.portUtilizationStatus != "FREE") {
+                    Text(
+                        text = "Unmapped — ready to assign",
+                        color = Color.Gray
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                }else{
+                    Text(
+                        text = "Available once terminated",
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (mapping.portUtilizationStatus != "FREE") {
+
+                if (!isEditing) {
+
+                    Button(
+                        onClick = {
+                            isEditing = true
+                        }
+                    ) {
+                        Text(
+                            if (mapping.customer == null)
+                                "+ Map Customer"
+                            else
+                                "Change"
+                        )
+                    }
+
+                } else {
+
+                    CustomerSelectionRow(
+                        customers = customers,
+                        selectedCustomerId = selectedCustomerId,
+                        onCustomerSelected = {
+                            selectedCustomerId = it
+                        },
+                        onApply = {
+
+                            if (
+                                mapping.portId != null &&
+                                selectedCustomerId != null
+                            ) {
+
+                                onApplyCustomer(
+                                    mapping.portId,
+                                    selectedCustomerId!!
+                                )
+                            }
+
+                            isEditing = false
+                        },
+                        onCancel = {
+
+                            selectedCustomerId =
+                                mapping.customer?.customerId
+
+                            isEditing = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CustomerSelectionRow(
+    customers: List<CustomerResponse>,
+    selectedCustomerId: Int?,
+    onCustomerSelected: (Int) -> Unit,
+    onApply: () -> Unit,
+    onCancel: () -> Unit
+) {
+
+    var expanded by remember {
+        mutableStateOf(false)
+    }
+
+    val selectedCustomer =
+        customers.find {
+            it.customerId == selectedCustomerId
+        }
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = {
+                expanded = !expanded
+            }
+        ) {
+
+            OutlinedTextField(
+                value = selectedCustomer?.customerName
+                    ?: "Select Customer",
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth(),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(
+                        expanded = expanded
+                    )
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.Black,
+                    unfocusedTextColor = Color.Black,
+                    disabledTextColor = Color.Black,
+
+                    focusedBorderColor = Color.Black,
+                    unfocusedBorderColor = Color.Gray,
+
+                    focusedLabelColor = Color.Black,
+                    unfocusedLabelColor = Color.Black,
+
+                    focusedTrailingIconColor = Color.Black,
+                    unfocusedTrailingIconColor = Color.Black
+                )
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = {
+                    expanded = false
+                }
+            ) {
+
+                customers.forEach { customer ->
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(customer.customerName)
+                        },
+                        onClick = {
+
+                            onCustomerSelected(
+                                customer.customerId
+                            )
+
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Button(
+            onClick = onApply,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Apply")
+        }
+
+        Button(
+            onClick = onCancel,
+            modifier = Modifier.weight(1f)
+        ) {
+            Text("Close")
+        }
+    }
+}
+
+@Composable
+fun ColorDot(
+    hex: String?
+) {
+
+    val color = try {
+
+        Color(
+            android.graphics.Color.parseColor(
+                hex ?: "#D3D3D3"
+            )
+        )
+
+    } catch (_: Exception) {
+
+        Color.LightGray
+    }
+
+    Box(
+        modifier = Modifier
+            .size(14.dp)
+            .background(
+                color,
+                CircleShape
+            )
+    )
 }
 
 
@@ -2117,6 +2710,139 @@ fun PortsTabContent(
     }
 }
 
+@Composable
+fun CoresTabContent(
+    cores: List<CoreUtilization>
+) {
+
+    if (cores.isEmpty()) {
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("No Core Data Available")
+        }
+
+        return
+    }
+
+    Text(
+        text = "CORE UTILIZATION",
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        modifier = Modifier.padding(16.dp)
+    )
+
+    val horizontalScrollState =
+        rememberScrollState()
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+    ) {
+
+        Column {
+            HorizontalDivider()
+
+            // HEADER
+
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(horizontalScrollState)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant
+                    )
+            ) {
+
+                TableCell(
+                    text = "TUBE / CORE",
+                    width = 100.dp,
+                    isHeader = true
+                )
+
+                TableCell(
+                    text = "STATUS",
+                    width = 80.dp,
+                    isHeader = true
+                )
+
+                TableCell(
+                    text = "END",
+                    width = 80.dp,
+                    isHeader = true
+                )
+
+                TableCell(
+                    text = "ATTACHED ASSET",
+                    width = 120.dp,
+                    isHeader = true
+                )
+
+                TableCell(
+                    text = "CONNECTION",
+                    width = 120.dp,
+                    isHeader = true
+                )
+            }
+
+            HorizontalDivider()
+
+            // DATA
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 400.dp)
+            ) {
+
+                items(cores) { core ->
+
+                    Row(
+                        modifier = Modifier
+                            .horizontalScroll(
+                                horizontalScrollState
+                            )
+                    ) {
+
+                        TableCell(
+                            text = "T${core.tubeNo} - C${core.coreNo}",
+                            width = 100.dp
+                        )
+
+                        TableCell(
+                            text = core.utilizationStatus ?: "-",
+                            width = 80.dp
+                        )
+
+                        TableCell(
+                            text = core.cableEndCode ?: "-",
+                            width = 80.dp
+                        )
+
+                        TableCell(
+                            text = "#${core.attachedAssetId ?: "-"}",
+                            width = 120.dp
+                        )
+
+                        TableCell(
+                            text = core.pairedPortId?.let {
+                                "Port #$it"
+                            } ?: "-",
+                            width = 120.dp
+                        )
+                    }
+
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HealthStatusTabContent(
@@ -2136,7 +2862,7 @@ fun HealthStatusTabContent(
         "Select health status",
         "LIVE",
         "FAULTY",
-        "UNKNOWN"
+        "OK"
     )
 
     if (ports.isEmpty()) {
@@ -2305,7 +3031,7 @@ fun PortHealthCard(
 ) {
 
     val utilizationStatus = port.utilizationStatus ?: "UNKNOWN"
-    val healthStatus = port.healthStatus ?: "UNKNOWN"
+    val healthStatus = port.healthStatus ?: "OK"
 
     val utilizationBg =
         if (utilizationStatus.equals("FREE", true))
@@ -4814,6 +5540,14 @@ fun createLabeledSquareMarker(
     canvas.drawRect(squareLeft, squareTop, squareRight, squareBottom, squarePaint)
 
     return bitmap
+}
+
+fun formatDate(dateString: String): String {
+    val inputFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+    val outputFormatter = DateTimeFormatter.ofPattern("dd MMM yyyy")
+
+    return LocalDateTime.parse(dateString, inputFormatter)
+        .format(outputFormatter)
 }
 
 enum class AssetDetailTab {

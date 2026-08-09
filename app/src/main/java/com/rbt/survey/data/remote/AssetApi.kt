@@ -141,4 +141,22 @@ interface AssetApi {
     suspend fun updatePortHealthStatus(
         @Body request: RequestBody
     ): Response<Unit>
+
+
+    @GET("fiber-terminations/fms/{assetId}/ports")
+    suspend fun getCustomerMappings(
+        @Path("assetId") assetId: Int
+    ): List<CustomerMappingResponse>
+
+    @POST("customer-circuits/port-mapping")
+    suspend fun updateCustomerPort(
+        @Body request: RequestBody
+    ): Response<ResponseBody>
+
+    @GET("splice-distribution-diagram/by-splice/{assetId}/report.pdf")
+    @Streaming
+    suspend fun exportSpliceClosureDiagramPdf(
+        @Path("assetId") assetId: Int
+    ): Response<ResponseBody>
+
 }

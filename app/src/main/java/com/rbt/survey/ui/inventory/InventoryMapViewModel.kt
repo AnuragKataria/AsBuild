@@ -69,6 +69,13 @@ class InventoryMapViewModel(
     private val _terminationResult = MutableStateFlow<String?>(null)
     val terminationResult = _terminationResult.asStateFlow()
 
+    private val _customerMappings = MutableStateFlow<List<CustomerMappingResponse>>(emptyList())
+    val customerMappings = _customerMappings.asStateFlow()
+
+    private val _customerMappingResponse = MutableStateFlow<JSONObject?>(null)
+
+    val customerMappingResponse = _customerMappingResponse.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
 
@@ -599,6 +606,115 @@ class InventoryMapViewModel(
                 onSuccess()
             } catch (e: Exception) {
                 e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun loadCustomerMappings(assetId: Int) {
+
+        viewModelScope.launch {
+
+            try {
+
+                _isLoading.value = true
+                _isLoadingmessage.value = "Fetchng Customer Mapping"
+
+                _customerMappings.value =
+                    repository.getCustomerMappings(assetId)
+
+            } catch (e: Exception) {
+
+                e.printStackTrace()
+
+            } finally {
+
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun updateCustomerPort(request: JSONObject,onSuccess: () -> Unit,onMapConflict: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _isLoadingmessage.value = "Updating Customer"
+
+                val response = repository.updateCustomerPort(request)
+
+                val responseText =
+                    if (response.isSuccessful) {
+                        response.body()?.string()
+                    } else {
+                        response.errorBody()?.string()
+                    }
+
+                val json = JSONObject(responseText ?: "{}")
+
+                _customerMappingResponse.value = json
+
+                if (json.optString("resultType") == "MAPPED") {
+                    onSuccess()
+                }else if(json.optString("resultType") == "CUSTOMER_CONFLICT"){
+                    onMapConflict()
+                }else if(json.optString("resultType") == "ALREADY_MAPPED"){
+                    onSuccess()
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun exportSpliceClosureDiagramPdf(
+        assetId: Int,
+        context: Context
+    ) {
+
+        viewModelScope.launch {
+
+            try {
+                _isLoading.value = true
+                val response =
+                    repository.exportSpliceClosureDiagramPdf(assetId)
+
+                if (response.isSuccessful) {
+
+                    response.body()?.let {
+
+                        val savedPdf = savePdf(
+                            context,
+                            it,
+                            "SpliceClosure_$assetId.pdf"
+                        )
+
+                        savedPdf?.let { (uri, fileName) ->
+
+                            showDownloadNotification(
+                                context,
+                                fileName,
+                                uri
+                            )
+                        }
+
+                        _saveMessage.value =
+                            "PDF downloaded successfully"
+                    }
+
+                } else {
+
+                    _saveMessage.value =
+                        "No data available to download"
+                }
+
+            } catch (e: Exception) {
+
+                _saveMessage.value =
+                    e.message ?: "Failed to download PDF"
             } finally {
                 _isLoading.value = false
             }

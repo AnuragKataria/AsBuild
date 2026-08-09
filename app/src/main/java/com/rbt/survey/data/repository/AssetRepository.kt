@@ -203,12 +203,28 @@ class AssetRepository (
     suspend fun updatePortHealthStatus(
         request: JSONObject
     ): Response<Unit> {
-
         val body = request.toString()
             .toRequestBody("application/json".toMediaType())
-
         return apiService.updatePortHealthStatus(body)
     }
 
+    suspend fun getCustomerMappings(
+        assetId: Int
+    ): List<CustomerMappingResponse> {
+
+        return apiService.getCustomerMappings(assetId)
+    }
+
+    suspend fun updateCustomerPort(
+        request: JSONObject
+    ): Response<ResponseBody> {
+        val body = request.toString()
+            .toRequestBody("application/json".toMediaType())
+        return apiService.updateCustomerPort(body)
+    }
+
+    suspend fun exportSpliceClosureDiagramPdf(
+        assetId: Int
+    ) = apiService.exportSpliceClosureDiagramPdf(assetId)
 
 }
