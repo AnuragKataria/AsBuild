@@ -33,7 +33,7 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit
 ) {
     var email by remember { mutableStateOf("vikas@gmail.com") }
-    var password by remember { mutableStateOf("12345678") }
+    var password by remember { mutableStateOf("123456789") }
     var isPasswordVisible by remember { mutableStateOf(false) }
     
     val uiState by viewModel.uiState.collectAsState()

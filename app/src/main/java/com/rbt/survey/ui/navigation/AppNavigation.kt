@@ -36,6 +36,9 @@ import androidx.work.*
 import com.rbt.survey.data.repository.AssetRepository
 import com.rbt.survey.location.LocationService
 import com.rbt.survey.ui.dashboard.DashboardScreen
+import com.rbt.survey.ui.incidentManagement.IncidentManagementScreen
+import com.rbt.survey.ui.incidentManagement.IncidentManagementViewModel
+import com.rbt.survey.ui.incidentManagement.IncidentManagementViewModelFactory
 import com.rbt.survey.ui.inventory.InventoryMapScreen
 import com.rbt.survey.ui.inventory.InventoryMapViewModel
 import com.rbt.survey.ui.inventory.InventoryMapViewModelFactory
@@ -63,6 +66,7 @@ sealed class Screen(val route: String) {
     object Dashboard : Screen("dashboard")
 
     object LocationTracking : Screen("location_tracking")
+    object IncidentManagement : Screen("incident_management")
     object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}&surveyRadius={surveyRadius}&submissionId={submissionId}&lineGeometry={lineGeometry}") {
         fun createRoute(formId: Int, blockCode: String?, gpName: String?,surveyRadius: Int?, submissionId: Int? = null, lineGeometry: String? = null) : String {
 
@@ -217,7 +221,6 @@ fun AppNavigation() {
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
                     onInventoryClick = {
-//                        navController.navigate(Screen.Inventory.route)
                         navController.navigate(Screen.InventoryMap.route)
                     },
                     onSurveyClick = {
@@ -225,6 +228,9 @@ fun AppNavigation() {
                     },
                     onLocationTrackingClick = {
                         navController.navigate(Screen.LocationTracking.route)
+                    },
+                    onIncidentManagementClick = {
+                        navController.navigate(Screen.IncidentManagement.route)
                     },
                     onLogout = {
                         CoroutineScope(Dispatchers.Main).launch {
@@ -442,13 +448,10 @@ fun AppNavigation() {
             composable(Screen.LocationTracking.route) {
 
                 val database = AppDatabase.getDatabase(context)
-
                 val geoApi = remember {
                     RetrofitClient.getGeoApi(context, preferences)
                 }
-
                 val geoRepository = remember {
-
                     GeoRepository(
                         geoApi,
                         database.cachedBlockAssignmentDao(),
@@ -457,9 +460,7 @@ fun AppNavigation() {
                         database.locationDao()
                     )
                 }
-
                 val viewModel: LocationTrackingViewModel = viewModel(
-
                     factory = LocationTrackingViewModelFactory(
                         geoRepository
                     )
@@ -469,6 +470,26 @@ fun AppNavigation() {
 
                     viewModel = viewModel,
 
+                    onBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(Screen.IncidentManagement.route) {
+
+                val assetApi = remember {
+                    RetrofitClient.getAssetApi(context, preferences)
+                }
+                val assetRepository = remember {
+                    AssetRepository(assetApi)
+                }
+                val viewModel: IncidentManagementViewModel = viewModel(
+                    factory = IncidentManagementViewModelFactory(assetRepository)
+                )
+
+                IncidentManagementScreen(
+                    viewModel = viewModel,
                     onBack = {
                         navController.popBackStack()
                     }

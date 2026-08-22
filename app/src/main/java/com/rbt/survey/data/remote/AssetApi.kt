@@ -137,6 +137,11 @@ interface AssetApi {
         @Body request: RequestBody
     ): Response<Unit>
 
+    @POST("fiber-splices")
+    suspend fun createSplice(
+        @Body request: RequestBody
+    ): Response<Unit>
+
     @POST("fiber-terminations/ports/health-status")
     suspend fun updatePortHealthStatus(
         @Body request: RequestBody
@@ -157,6 +162,36 @@ interface AssetApi {
     @Streaming
     suspend fun exportSpliceClosureDiagramPdf(
         @Path("assetId") assetId: Int
+    ): Response<ResponseBody>
+
+
+    // Incident Management
+
+    @GET("incident")
+    suspend fun getIncidents(
+        @Query("ProjectId") projectId: Long? = null,
+        @Query("Status") status: String? = null,
+        @Query("Priority") priority: String? = null,
+        @Query("Category") category: String? = null,
+        @Query("AssetId") assetId: Long? = null,
+        @Query("AssigneeId") assigneeId: Long? = null,
+        @Query("SearchQuery") searchQuery: String? = null,
+        @Query("PageNumber") pageNumber: Int = 1,
+        @Query("PageSize") pageSize: Int = 100
+    ): IncidentResponse
+
+    @Multipart
+    @POST("incident")
+    suspend fun logIncident(
+        @Part("ProjectId") projectId: RequestBody,
+        @Part("AssetId") assetId: RequestBody?,
+        @Part("Title") title: RequestBody,
+        @Part("Description") description: RequestBody,
+        @Part("Category") category: RequestBody,
+        @Part("Priority") priority: RequestBody,
+        @Part("Latitude") latitude: RequestBody?,
+        @Part("Longitude") longitude: RequestBody?,
+        @Part attachments: List<MultipartBody.Part>
     ): Response<ResponseBody>
 
 }

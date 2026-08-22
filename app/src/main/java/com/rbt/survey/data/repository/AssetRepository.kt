@@ -1,10 +1,14 @@
 package com.rbt.survey.data.repository
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.rbt.survey.data.model.*
 import com.rbt.survey.data.remote.AssetApi
+import com.rbt.survey.ui.incidentManagement.getFileName
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -200,6 +204,16 @@ class AssetRepository (
         return apiService.createTermination(body)
     }
 
+    suspend fun createSplice(
+        request: JSONObject
+    ): Response<Unit> {
+
+        val body = request.toString()
+            .toRequestBody("application/json".toMediaType())
+
+        return apiService.createSplice(body)
+    }
+
     suspend fun updatePortHealthStatus(
         request: JSONObject
     ): Response<Unit> {
@@ -226,5 +240,116 @@ class AssetRepository (
     suspend fun exportSpliceClosureDiagramPdf(
         assetId: Int
     ) = apiService.exportSpliceClosureDiagramPdf(assetId)
+
+
+    //----------------------Incident Management--------------------
+
+    suspend fun getIncidents(
+        projectId: Long? = null,
+        status: String? = null,
+        priority: String? = null,
+        category: String? = null,
+        assetId: Long? = null,
+        assigneeId: Long? = null,
+        searchQuery: String? = null,
+        pageNumber: Int = 1,
+        pageSize: Int = 100
+    ): IncidentResponse {
+
+        return apiService.getIncidents(
+            projectId = projectId,
+            status = status,
+            priority = priority,
+            category = category,
+            assetId = assetId,
+            assigneeId = assigneeId,
+            searchQuery = searchQuery,
+            pageNumber = pageNumber,
+            pageSize = pageSize
+        )
+    }
+
+    suspend fun logIncident(
+        context: Context,
+        projectId: Long,
+        assetId: Long?,
+        title: String,
+        category: String,
+        priority: String,
+        description: String,
+        latitude: Double,
+        longitude: Double,
+        attachments: List<Uri>?
+    ): Response<ResponseBody> {
+
+        fun String.toTextRequestBody(): RequestBody {
+            return this.toRequestBody("text/plain".toMediaType())
+        }
+
+        val projectIdBody = projectId.toString().toTextRequestBody()
+        val assetIdBody = assetId?.toString()?.toTextRequestBody()
+        val titleBody = title.toTextRequestBody()
+        val descriptionBody = description.toTextRequestBody()
+        val categoryBody = category.toTextRequestBody()
+        val priorityBody = priority.toTextRequestBody()
+        val latitudeBody = latitude.toString().toTextRequestBody()
+        val longitudeBody = longitude.toString().toTextRequestBody()
+
+        val attachmentParts =
+            attachments?.mapNotNull { uri ->
+                try {
+
+                    val contentResolver = context.contentResolver
+
+                    val fileName = getFileName(context, uri)
+
+                    val mimeType =
+                        contentResolver.getType(uri)
+                            ?: "application/octet-stream"
+
+                    val bytes =
+                        contentResolver
+                            .openInputStream(uri)
+                            ?.use { inputStream ->
+                                inputStream.readBytes()
+                            }
+                            ?: return@mapNotNull null
+
+                    val requestBody =
+                        bytes.toRequestBody(
+                            mimeType.toMediaType()
+                        )
+
+                    MultipartBody.Part.createFormData(
+                        "attachments",
+                        fileName,
+                        requestBody
+                    )
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        "REPORT_INCIDENT",
+                        "Failed to process attachment: $uri",
+                        e
+                    )
+
+                    null
+                }
+
+            } ?: emptyList()
+
+        return apiService.logIncident(
+            projectId = projectIdBody,
+            assetId = assetIdBody,
+            title = titleBody,
+            description = descriptionBody,
+            category = categoryBody,
+            priority = priorityBody,
+            latitude = latitudeBody,
+            longitude = longitudeBody,
+            attachments = attachmentParts
+        )
+    }
 
 }

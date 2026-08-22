@@ -33,8 +33,9 @@ fun DashboardScreen(
     onInventoryClick: () -> Unit,
     onSurveyClick: () -> Unit,
     onLocationTrackingClick: () -> Unit,
-    onLogout: () -> Unit,
-    onNavigateToDgpsSettings: () -> Unit
+    onNavigateToDgpsSettings: () -> Unit,
+    onIncidentManagementClick: () -> Unit,
+    onLogout: () -> Unit
 ) {
 
     var showMenu by remember { mutableStateOf(false) }
@@ -86,40 +87,6 @@ fun DashboardScreen(
         }
     ) { paddingValues ->
 
-//        Column(
-//            modifier = Modifier
-//                .fillMaxSize()
-//                .padding(paddingValues)
-//                .padding(20.dp),
-//            verticalArrangement = Arrangement.spacedBy(20.dp),
-//            horizontalAlignment = Alignment.CenterHorizontally
-//        ) {
-//
-//            DashboardCard(
-//                title = "Inventory",
-//                icon = Icons.Default.Inventory,
-//                onClick = onInventoryClick
-//            )
-//
-//            DashboardCard(
-//                title = "Survey",
-//                icon = Icons.Default.Assignment,
-//                onClick = onSurveyClick
-//            )
-//
-//            DashboardCard(
-//                title = "Location Tracking",
-//                icon = Icons.Default.LocationOn,
-//                onClick = onLocationTrackingClick
-//            )
-//
-//            DashboardCard(
-//                title = "Device",
-//                icon = Icons.Default.Memory,
-//                onClick = onNavigateToDgpsSettings
-//            )
-//        }
-
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             modifier = Modifier
@@ -161,6 +128,14 @@ fun DashboardScreen(
                     onClick = onNavigateToDgpsSettings
                 )
             }
+
+            item {
+                DashboardCard(
+                    title = "Incident Management",
+                    imageRes = R.drawable.incident,
+                    onClick = onIncidentManagementClick
+                )
+            }
         }
     }
 }
@@ -190,7 +165,7 @@ fun DashboardCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -212,12 +187,6 @@ fun DashboardCard(
                     )
                 }
             }
-//            Icon(
-//                imageVector = icon,
-//                contentDescription = null,
-//                modifier = Modifier.size(64.dp),
-//                tint = MaterialTheme.colorScheme.primary
-//            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -229,49 +198,3 @@ fun DashboardCard(
         }
     }
 }
-
-//@Composable
-//fun DashboardCard(
-//    title: String,
-//    icon: ImageVector,
-//    onClick: () -> Unit
-//) {
-//    Card(
-//        modifier = Modifier
-//            .fillMaxWidth()
-//            .height(120.dp)
-//            .clickable { onClick() },
-//        shape = RoundedCornerShape(20.dp),
-//        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-//        colors = CardDefaults.cardColors(
-//            containerColor = MaterialTheme.colorScheme.surface
-//        ),
-//        border = BorderStroke(
-//            1.dp,
-//            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-//        )
-//    ) {
-//        Row(
-//            modifier = Modifier
-//                .fillMaxSize()
-//                .padding(20.dp),
-//            verticalAlignment = Alignment.CenterVertically
-//        ) {
-//
-//            Icon(
-//                imageVector = icon,
-//                contentDescription = null,
-//                modifier = Modifier.size(40.dp),
-//                tint = MaterialTheme.colorScheme.primary
-//            )
-//
-//            Spacer(modifier = Modifier.width(20.dp))
-//
-//            Text(
-//                text = title,
-//                style = MaterialTheme.typography.titleLarge,
-//                fontWeight = FontWeight.SemiBold
-//            )
-//        }
-//    }
-//}

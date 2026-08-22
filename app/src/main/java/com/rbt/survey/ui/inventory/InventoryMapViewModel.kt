@@ -60,14 +60,29 @@ class InventoryMapViewModel(
     private val _fmsutilization = MutableStateFlow<List<FmsPortUtilizationResponse>>(emptyList())
     val fmsutilization = _fmsutilization.asStateFlow()
 
-    private val _fibercorestructure = MutableStateFlow<FiberStructureResponse?>(null)
-    val fibercorestructure: StateFlow<FiberStructureResponse?> = _fibercorestructure
+    private val _terminationfibercorestructure = MutableStateFlow<FiberStructureResponse?>(null)
+    val terminationfibercorestructure: StateFlow<FiberStructureResponse?> = _terminationfibercorestructure
 
-    private val _fibercoreutilization = MutableStateFlow<List<FiberCoreUtilizationResponse>>(emptyList())
-    val fibercoreutilization: StateFlow<List<FiberCoreUtilizationResponse>> = _fibercoreutilization
+    private val _leftfibercorestructure = MutableStateFlow<FiberStructureResponse?>(null)
+    val leftfibercorestructure: StateFlow<FiberStructureResponse?> = _leftfibercorestructure
+
+    private val _rightfibercorestructure = MutableStateFlow<FiberStructureResponse?>(null)
+    val rightfibercorestructure: StateFlow<FiberStructureResponse?> = _rightfibercorestructure
+
+    private val _terminationFiberCoreUtilization = MutableStateFlow<List<FiberCoreUtilizationResponse>>(emptyList())
+    val terminationfibercoreutilization: StateFlow<List<FiberCoreUtilizationResponse>> = _terminationFiberCoreUtilization
+
+    private val _leftFiberCoreUtilization = MutableStateFlow<List<FiberCoreUtilizationResponse>>(emptyList())
+    val leftfibercoreutilization: StateFlow<List<FiberCoreUtilizationResponse>> = _leftFiberCoreUtilization
+
+    private val _rightFiberCoreUtilization = MutableStateFlow<List<FiberCoreUtilizationResponse>>(emptyList())
+    val rightfibercoreutilization: StateFlow<List<FiberCoreUtilizationResponse>> = _rightFiberCoreUtilization
 
     private val _terminationResult = MutableStateFlow<String?>(null)
     val terminationResult = _terminationResult.asStateFlow()
+
+    private val _spliceResult = MutableStateFlow<String?>(null)
+    val spliceResult = _spliceResult.asStateFlow()
 
     private val _customerMappings = MutableStateFlow<List<CustomerMappingResponse>>(emptyList())
     val customerMappings = _customerMappings.asStateFlow()
@@ -524,12 +539,25 @@ class InventoryMapViewModel(
         }
     }
 
-    fun loadFiberCoreStructure(assetId: Int) {
+    fun loadFiberCoreStructure(assetId: Int, side: String) {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
                 _isLoadingmessage.value = "Fetching Fibercore Structure"
-                _fibercorestructure.value = repository.getFiberCoreStructure(assetId)
+                val result = repository.getFiberCoreStructure(assetId)
+                when (side) {
+                    "TerminationFiber" -> {
+                        _terminationfibercorestructure.value = result
+                    }
+
+                    "LeftFiber" -> {
+                        _leftfibercorestructure.value = result
+                    }
+
+                    "RightFiber" -> {
+                        _rightfibercorestructure.value = result
+                    }
+                }
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -539,12 +567,25 @@ class InventoryMapViewModel(
         }
     }
 
-    fun loadFiberCoreUtilization(assetId: Int) {
+    fun loadFiberCoreUtilization(assetId: Int,side: String) {
         viewModelScope.launch {
             try {
                 _isLoading.value = true
                 _isLoadingmessage.value = "Fetching Fibercore Utilization"
-                _fibercoreutilization.value = repository.getFiberCoreUtilization(assetId)
+                val result = repository.getFiberCoreUtilization(assetId)
+                when (side) {
+                    "TerminationFiber" -> {
+                        _terminationFiberCoreUtilization.value = result
+                    }
+
+                    "LeftFiber" -> {
+                        _leftFiberCoreUtilization.value = result
+                    }
+
+                    "RightFiber" -> {
+                        _rightFiberCoreUtilization.value = result
+                    }
+                }
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -556,8 +597,15 @@ class InventoryMapViewModel(
 
     fun clearFMSandFiberUtilization() {
         _fmsutilization.value = emptyList()
-        _fibercorestructure.value = null
-        _fibercoreutilization.value = emptyList()
+        _terminationfibercorestructure.value = null
+        _terminationFiberCoreUtilization.value = emptyList()
+    }
+
+    fun clearFiberStructureandFiberUtilization() {
+        _leftfibercorestructure.value = null
+        _leftFiberCoreUtilization.value = emptyList()
+        _rightfibercorestructure.value = null
+        _rightFiberCoreUtilization.value = emptyList()
     }
 
     fun createTermination(request: JSONObject) {
@@ -588,6 +636,42 @@ class InventoryMapViewModel(
 
             } catch (e: Exception) {
                 _terminationResult.value =
+                    e.message ?: "Something went wrong"
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun createSplice(request: JSONObject) {
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _isLoadingmessage.value = "Creating Splice"
+                val result =
+                    repository.createSplice(request)
+                if (result.isSuccessful) {
+                    _spliceResult.value =
+                        "SUCCESS"
+                    Log.d(
+                        "splice",
+                        "Created Successfully"
+                    )
+
+                } else {
+                    _spliceResult.value =
+                        result.errorBody()?.string()
+                            ?: "Unknown Error"
+                    Log.e(
+                        "splice",
+                        result.errorBody()?.string() ?: "Unknown Error"
+                    )
+                }
+
+
+            } catch (e: Exception) {
+                _spliceResult.value =
                     e.message ?: "Something went wrong"
                 e.printStackTrace()
             } finally {
