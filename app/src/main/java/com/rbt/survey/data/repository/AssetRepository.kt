@@ -11,9 +11,11 @@ import com.rbt.survey.data.remote.AssetApi
 import com.rbt.survey.ui.incidentManagement.getFileName
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import retrofit2.Response
+import java.io.File
 
 class AssetRepository (
     private val apiService: AssetApi
@@ -350,6 +352,170 @@ class AssetRepository (
             longitude = longitudeBody,
             attachments = attachmentParts
         )
+    }
+
+    suspend fun getIncidentDetails(
+        incidentId: Int
+    ): IncidentDetailsResponse {
+
+        val response = apiService.getIncidentDetails(incidentId)
+
+        if (response.isSuccessful) {
+            return response.body()
+                ?: throw Exception("Empty response")
+        }
+
+        throw Exception(
+            response.errorBody()?.string()
+                ?: "Failed to load incident details"
+        )
+    }
+
+    suspend fun getIncidentImpactDetails(
+        incidentId: Int
+    ): List<IncidentImpactAssetDetails> {
+
+        val response = apiService.getIncidentImpactDetails(incidentId)
+
+        if (response.isSuccessful) {
+            return response.body() ?: emptyList()
+        }
+
+        throw Exception(
+            response.errorBody()?.string()
+                ?: "Failed to load impact data"
+        )
+    }
+
+    suspend fun downloadIncidentReport(
+        incidentId: Int
+    ): Response<ResponseBody> {
+        return apiService.downloadIncidentReport(incidentId)
+    }
+
+    suspend fun addIncidentComment(
+        incidentId: Int,
+        request: RequestBody
+    ): Boolean {
+
+        val response = apiService.addIncidentComment(
+            incidentId,
+            request
+        )
+
+        return response.isSuccessful
+    }
+
+    suspend fun uploadOTDRTrace(
+        file: File,
+        fromStation: String,
+        toStation: String,
+        uploadedBy: String,
+        deviceType: String
+    ): Result<Boolean> {
+
+        return try {
+
+            val requestFile =
+                file.asRequestBody("multipart/form-data".toMediaType())
+
+            val filePart =
+                MultipartBody.Part.createFormData(
+                    "File",
+                    file.name,
+                    requestFile
+                )
+
+            val response = apiService.uploadOTDRTrace(
+                file = filePart,
+                fromStationName = fromStation.toRequestBody("text/plain".toMediaType()),
+                toStationName = toStation.toRequestBody("text/plain".toMediaType()),
+                reportUploadedBy = uploadedBy.toRequestBody("text/plain".toMediaType()),
+                otdrDeviceType = deviceType.toRequestBody("text/plain".toMediaType())
+            )
+
+            if (response.isSuccessful) {
+
+                Result.success(true)
+
+            } else {
+
+                Result.failure(
+                    Exception(
+                        "Upload failed: ${response.code()}"
+                    )
+                )
+            }
+
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getOTDRReports(): Result<JsonObject> {
+
+        return try {
+            val response = apiService.getOTDRReports()
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                Result.failure(
+                    Exception(
+                        "Failed to load OTDR reports: ${response.code()}"
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+
+    suspend fun getOTDRSiteNames(): Result<List<String>> {
+
+        return try {
+
+            val response = apiService.getOTDRSiteNames()
+
+            if (response.isSuccessful) {
+
+                val body = response.body()
+
+                if (body != null &&
+                    body.get("success")?.asBoolean == true
+                ) {
+
+                    val data = body.getAsJsonArray("data")
+
+                    val siteNames = data.map {
+                        it.asString
+                    }
+
+                    Result.success(siteNames)
+
+                } else {
+
+                    Result.failure(
+                        Exception(
+                            body?.get("message")?.asString
+                                ?: "Failed to load site names"
+                        )
+                    )
+                }
+
+            } else {
+
+                Result.failure(
+                    Exception(
+                        "Failed to load site names: ${response.code()}"
+                    )
+                )
+            }
+
+        } catch (e: Exception) {
+
+            Result.failure(e)
+        }
     }
 
 }

@@ -35,6 +35,7 @@ fun DashboardScreen(
     onLocationTrackingClick: () -> Unit,
     onNavigateToDgpsSettings: () -> Unit,
     onIncidentManagementClick: () -> Unit,
+    onInspectionAuditClick: () -> Unit,
     onLogout: () -> Unit
 ) {
 
@@ -134,6 +135,14 @@ fun DashboardScreen(
                     title = "Incident Management",
                     imageRes = R.drawable.incident,
                     onClick = onIncidentManagementClick
+                )
+            }
+
+            item {
+                DashboardCard(
+                    title = "Inspection Audit",
+                    imageRes = R.drawable.inspection,
+                    onClick = onInspectionAuditClick
                 )
             }
         }

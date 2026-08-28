@@ -23,6 +23,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.google.maps.android.compose.MapType
+import com.rbt.survey.data.utils.savePdf
+import com.rbt.survey.data.utils.showDownloadNotification
 import okhttp3.RequestBody
 import org.json.JSONObject
 
@@ -375,139 +377,6 @@ class InventoryMapViewModel(
             }
         }
     }
-
-
-    private fun savePdf(
-        context: Context,
-        body: ResponseBody,
-        fileName: String
-    ): Pair<Uri, String>? {
-
-        val values = ContentValues().apply {
-
-            put(
-                MediaStore.Downloads.DISPLAY_NAME,
-                fileName
-            )
-
-            put(
-                MediaStore.Downloads.MIME_TYPE,
-                "application/pdf"
-            )
-
-            put(
-                MediaStore.Downloads.RELATIVE_PATH,
-                Environment.DIRECTORY_DOWNLOADS
-            )
-        }
-
-        val uri =
-            context.contentResolver.insert(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                values
-            ) ?: return null
-
-        context.contentResolver
-            .openOutputStream(uri)
-            ?.use { output ->
-
-                body.byteStream().use { input ->
-
-                    input.copyTo(output)
-                }
-            }
-
-        var actualFileName = fileName
-
-        context.contentResolver.query(
-            uri,
-            arrayOf(MediaStore.Downloads.DISPLAY_NAME),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-
-            if (cursor.moveToFirst()) {
-
-                actualFileName =
-                    cursor.getString(
-                        cursor.getColumnIndexOrThrow(
-                            MediaStore.Downloads.DISPLAY_NAME
-                        )
-                    )
-            }
-        }
-
-        return Pair(
-            uri,
-            actualFileName
-        )
-    }
-
-    private fun showDownloadNotification(
-        context: Context,
-        fileName: String,
-        pdfUri: Uri
-    ) {
-
-        val manager =
-            context.getSystemService(
-                Context.NOTIFICATION_SERVICE
-            ) as NotificationManager
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-
-            val channel = NotificationChannel(
-                "downloads",
-                "Downloads",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-
-            manager.createNotificationChannel(channel)
-        }
-
-        val intent = Intent(
-            Intent.ACTION_VIEW
-        ).apply {
-
-            setDataAndType(
-                pdfUri,
-                "application/pdf"
-            )
-
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-
-        val pendingIntent =
-            PendingIntent.getActivity(
-                context,
-                System.currentTimeMillis().toInt(),
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or
-                        PendingIntent.FLAG_IMMUTABLE
-            )
-
-        val notification =
-            NotificationCompat.Builder(
-                context,
-                "downloads"
-            )
-                .setSmallIcon(
-                    android.R.drawable.stat_sys_download_done
-                )
-                .setContentTitle("Download Complete")
-                .setContentText(fileName)
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(true)
-                .build()
-
-        manager.notify(
-            System.currentTimeMillis().toInt(),
-            notification
-        )
-    }
-
 
     fun loadcustomers() {
         viewModelScope.launch {

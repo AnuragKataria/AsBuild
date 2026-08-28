@@ -194,4 +194,44 @@ interface AssetApi {
         @Part attachments: List<MultipartBody.Part>
     ): Response<ResponseBody>
 
+    @GET("incident/{incidentId}")
+    suspend fun getIncidentDetails(
+        @Path("incidentId") incidentId: Int
+    ): Response<IncidentDetailsResponse>
+
+    @GET("incident/{incidentId}/impact")
+    suspend fun getIncidentImpactDetails(
+        @Path("incidentId") incidentId: Int
+    ): Response<List<IncidentImpactAssetDetails>>
+
+    @GET("incident/{incidentId}/report")
+    suspend fun downloadIncidentReport(
+        @Path("incidentId") incidentId: Int
+    ): Response<ResponseBody>
+
+    @POST("incident/{incidentId}/comments")
+    suspend fun addIncidentComment(
+        @Path("incidentId") incidentId: Int,
+        @Body request: RequestBody
+    ): Response<Unit>
+
+
+    @Multipart
+    @POST("otdr-reports/convert")
+    suspend fun uploadOTDRTrace(
+        @Part file: MultipartBody.Part,
+        @Part("FromStationName") fromStationName: RequestBody,
+        @Part("ToStationName") toStationName: RequestBody,
+        @Part("ReportUploadedBy") reportUploadedBy: RequestBody,
+        @Part("OtdrDeviceType") otdrDeviceType: RequestBody
+    ): Response<ResponseBody>
+
+    @GET("otdr-reports/uploads")
+    suspend fun getOTDRReports(): Response<JsonObject>
+
+    @GET("projects/5/asset-dynamic-fields/site-names")
+    suspend fun getOTDRSiteNames(
+        @Query("assetTypeId") assetTypeId: Int = 86
+    ): Response<JsonObject>
+
 }

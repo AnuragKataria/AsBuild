@@ -1,5 +1,6 @@
 package com.rbt.survey.ui.navigation
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.layout.*
@@ -15,14 +16,11 @@ import androidx.navigation.navArgument
 import com.rbt.survey.MyApplication
 import com.rbt.survey.data.local.UserPreferences
 import com.rbt.survey.data.local.db.AppDatabase
-import com.rbt.survey.dgps.DgpsManager
 import com.rbt.survey.data.remote.RetrofitClient
 import com.rbt.survey.data.repository.*
 import com.rbt.survey.ui.form.*
 import com.rbt.survey.ui.surveyDashboard.*
 import com.rbt.survey.ui.login.*
-import com.rbt.survey.ui.inventory.InventoryScreen
-import com.rbt.survey.ui.login.LoginViewModelFactory
 import com.rbt.survey.ui.map.MapScreen as GpMapScreen
 import com.rbt.survey.ui.form.MapScreen as FieldMapScreen
 import com.rbt.survey.ui.map.MapViewModel
@@ -31,17 +29,13 @@ import com.rbt.survey.ui.dgps.*
 //import com.rbt.survey.ui.dgps.DeviceSelfCheckScreen
 import com.rbt.survey.ui.splash.SplashScreen
 import java.net.*
-
 import androidx.work.*
 import com.rbt.survey.data.repository.AssetRepository
 import com.rbt.survey.location.LocationService
 import com.rbt.survey.ui.dashboard.DashboardScreen
-import com.rbt.survey.ui.incidentManagement.IncidentManagementScreen
-import com.rbt.survey.ui.incidentManagement.IncidentManagementViewModel
-import com.rbt.survey.ui.incidentManagement.IncidentManagementViewModelFactory
-import com.rbt.survey.ui.inventory.InventoryMapScreen
-import com.rbt.survey.ui.inventory.InventoryMapViewModel
-import com.rbt.survey.ui.inventory.InventoryMapViewModelFactory
+import com.rbt.survey.ui.incidentManagement.*
+import com.rbt.survey.ui.inspectionAudit.*
+import com.rbt.survey.ui.inventory.*
 import com.rbt.survey.ui.locationTrackingDashboard.*
 import com.rbt.survey.worker.SyncWorker
 import kotlinx.coroutines.*
@@ -67,6 +61,7 @@ sealed class Screen(val route: String) {
 
     object LocationTracking : Screen("location_tracking")
     object IncidentManagement : Screen("incident_management")
+    object InspectionAudit : Screen("inspection_audit")
     object FormDataCollection : Screen("form_data/{formId}?blockCode={blockCode}&gpName={gpName}&surveyRadius={surveyRadius}&submissionId={submissionId}&lineGeometry={lineGeometry}") {
         fun createRoute(formId: Int, blockCode: String?, gpName: String?,surveyRadius: Int?, submissionId: Int? = null, lineGeometry: String? = null) : String {
 
@@ -91,8 +86,15 @@ sealed class Screen(val route: String) {
                             "UTF-8"
                         )
                     }?radius=${radius ?: -1}&refLine=$encodedLine"
-                }
-            }
+        }
+    }
+
+    object IncidentDetails : Screen("incident_details/{incidentId}") {
+
+        fun createRoute(incidentId: Int): String {
+            return "incident_details/$incidentId"
+        }
+    }
 
     object DgpsSettings : Screen("dgps_settings")
     object DgpsRover : Screen("dgps_rover")
@@ -111,6 +113,7 @@ sealed class Screen(val route: String) {
 }
 
 
+@SuppressLint("UnrememberedGetBackStackEntry")
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
@@ -231,6 +234,9 @@ fun AppNavigation() {
                     },
                     onIncidentManagementClick = {
                         navController.navigate(Screen.IncidentManagement.route)
+                    },
+                    onInspectionAuditClick = {
+                        navController.navigate(Screen.InspectionAudit.route)
                     },
                     onLogout = {
                         CoroutineScope(Dispatchers.Main).launch {
@@ -492,7 +498,69 @@ fun AppNavigation() {
                     viewModel = viewModel,
                     onBack = {
                         navController.popBackStack()
+                    },
+                    onIncidentCardClick = { incidentId ->
+                        navController.navigate(
+                            Screen.IncidentDetails.createRoute(
+                                incidentId
+                            )
+                        )
                     }
+                )
+            }
+
+            composable(
+                route = Screen.IncidentDetails.route,
+                arguments = listOf(
+                    navArgument("incidentId") {
+                        type = NavType.IntType
+                    }
+                )
+            ) { backStackEntry ->
+
+                val incidentId =
+                    backStackEntry.arguments?.getInt("incidentId") ?: 0
+
+                val assetApi = remember {
+                    RetrofitClient.getAssetApi(context, preferences)
+                }
+
+                val assetRepository = remember {
+                    AssetRepository(assetApi)
+                }
+
+                val viewModel: IncidentDetailsViewModel = viewModel(
+                    factory = IncidentDetailsViewModelFactory(
+                        assetRepository
+                    )
+                )
+
+                IncidentDetailsScreen(
+                    incidentId = incidentId,
+                    viewModel = viewModel,
+                    onBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(Screen.InspectionAudit.route) {
+
+                val assetApi = remember {
+                    RetrofitClient.getAssetApi(context, preferences)
+                }
+                val assetRepository = remember {
+                    AssetRepository(assetApi)
+                }
+                val viewModel: OTDRTracesViewModel = viewModel(
+                    factory = OTDRTracesViewModelFactory(assetRepository, preferences)
+                )
+
+                OTDRTracesScreen(
+                    viewModel = viewModel,
+                    onBack = {
+                        navController.popBackStack()
+                    },
                 )
             }
 

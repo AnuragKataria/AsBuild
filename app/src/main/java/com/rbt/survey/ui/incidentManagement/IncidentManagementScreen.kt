@@ -60,7 +60,8 @@ import androidx.compose.foundation.background
 @Composable
 fun IncidentManagementScreen(
     viewModel: IncidentManagementViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onIncidentCardClick: (Int) -> Unit
 ) {
 
     val context = LocalContext.current
@@ -286,7 +287,7 @@ fun IncidentManagementScreen(
                         IncidentTicketCard(
                             incident = incident,
                             onClick = {
-                                // TODO: Open incident details
+                                onIncidentCardClick(incident.incidentId)
                             }
                         )
                     }
@@ -1012,9 +1013,7 @@ fun ReportIncidentDialog(
                             )
                         }
 
-                        // -------------------------------------------------
                         // ASSET
-                        // -------------------------------------------------
 
                         item {
 
