@@ -408,6 +408,7 @@ class AssetRepository (
 
     suspend fun uploadOTDRTrace(
         file: File,
+        projectId: Int,
         fromStation: String,
         toStation: String,
         uploadedBy: String,
@@ -428,6 +429,7 @@ class AssetRepository (
 
             val response = apiService.uploadOTDRTrace(
                 file = filePart,
+                projectId = projectId.toString().toRequestBody("text/plain".toMediaType()),
                 fromStationName = fromStation.toRequestBody("text/plain".toMediaType()),
                 toStationName = toStation.toRequestBody("text/plain".toMediaType()),
                 reportUploadedBy = uploadedBy.toRequestBody("text/plain".toMediaType()),
@@ -471,11 +473,11 @@ class AssetRepository (
     }
 
 
-    suspend fun getOTDRSiteNames(): Result<List<String>> {
+    suspend fun getOTDRSiteNames(projectId: Int): Result<List<String>> {
 
         return try {
 
-            val response = apiService.getOTDRSiteNames()
+            val response = apiService.getOTDRSiteNames(projectId)
 
             if (response.isSuccessful) {
 

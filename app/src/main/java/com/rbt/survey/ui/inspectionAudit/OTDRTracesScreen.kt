@@ -33,9 +33,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import com.google.gson.JsonObject
+import com.rbt.survey.ui.incidentManagement.IncidentProjectDropdown
 import java.io.BufferedInputStream
 import java.io.File
 import java.util.zip.ZipInputStream
+import com.rbt.survey.data.model.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,12 +48,16 @@ fun OTDRTracesScreen(
 
     val context = LocalContext.current
 
+    val projects by viewModel.projects.collectAsState()
     val isUploading by viewModel.isLoading.collectAsState()
     val isLoadingSites by viewModel.isLoadingSites.collectAsState()
     val loadingmessage by viewModel.isLoadingmessage.collectAsState()
     val otdrReports by viewModel.otdrReports.collectAsState()
     val siteNames by viewModel.siteNames.collectAsState()
 
+    var selectedProject by remember { mutableStateOf<ProjectResponse?>(null) }
+
+    val projectSelected = selectedProject != null
 
     val deviceTypes = listOf(
         "EXFO",
@@ -197,7 +203,7 @@ fun OTDRTracesScreen(
 
     LaunchedEffect(Unit) {
         viewModel.loadOTDRReports()
-        viewModel.loadOTDRSiteNames()
+        viewModel.loadFilterProjects()
     }
 
     LaunchedEffect(Unit) {
@@ -382,6 +388,22 @@ fun OTDRTracesScreen(
                                     Arrangement.spacedBy(12.dp)
                             ) {
 
+                                OTDRProjectDropdown(
+                                    projects = projects,
+                                    selectedProject = selectedProject,
+                                    onSelected = { project ->
+
+                                        selectedProject = project
+
+                                        selectedFrom = null
+                                        selectedTo = null
+
+                                        viewModel.loadOTDRSiteNames(
+                                            projectId = project.projectId
+                                        )
+                                    }
+                                )
+
                                 // FROM DROPDOWN
 
                                 OTDRStationDropdown(
@@ -392,6 +414,7 @@ fun OTDRTracesScreen(
                                     isLoading = isLoadingSites,
                                     loadingMessage = loadingmessage,
                                     searchPlaceholder = "Search From station...",
+                                    enabled = selectedProject != null,
                                     onSelected = { station ->
 
                                         selectedFrom = station
@@ -413,6 +436,7 @@ fun OTDRTracesScreen(
                                     isLoading = isLoadingSites,
                                     loadingMessage = loadingmessage,
                                     searchPlaceholder = "Search To station...",
+                                    enabled = selectedProject != null,
                                     onSelected = { station ->
 
                                         selectedTo = station
@@ -663,6 +687,10 @@ fun OTDRTracesScreen(
 
                                         val uri = selectedFileUri ?: return@Button
 
+                                        val projectId =
+                                            selectedProject?.projectId
+                                                ?: return@Button
+
                                         val file = uriToFile(
                                             context = context,
                                             uri = uri
@@ -670,6 +698,7 @@ fun OTDRTracesScreen(
 
                                         viewModel.uploadTrace(
                                             file = file,
+                                            projectId = projectId,
                                             fromStation = selectedFrom.orEmpty(),
                                             toStation = selectedTo.orEmpty(),
                                             deviceType = selectedDevice.orEmpty()
@@ -678,6 +707,7 @@ fun OTDRTracesScreen(
                                     },
 
                                     enabled =
+                                        selectedProject != null &&
                                         selectedFrom != null &&
                                                 selectedTo != null &&
                                                 selectedDevice != null &&
@@ -827,6 +857,100 @@ fun OTDRTracesScreen(
 }
 
 @Composable
+fun OTDRProjectDropdown(
+    projects: List<ProjectResponse>,
+    selectedProject: ProjectResponse?,
+    onSelected: (ProjectResponse) -> Unit
+) {
+
+    var expanded by remember {
+        mutableStateOf(false)
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+
+        Text(
+            text = "Project *",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+
+        Box(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            OutlinedTextField(
+                value = selectedProject?.projectName ?: "",
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text("Select Project")
+                },
+                trailingIcon = {
+
+                    Icon(
+                        imageVector =
+                            if (expanded)
+                                Icons.Default.KeyboardArrowUp
+                            else
+                                Icons.Default.KeyboardArrowDown,
+                        contentDescription = null
+                    )
+                }
+            )
+
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable {
+                        expanded = !expanded
+                    }
+            )
+        }
+
+        if (expanded) {
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .padding(top = 4.dp)
+            ) {
+
+                LazyColumn {
+
+                    items(
+                        items = projects,
+                        key = { it.projectId }
+                    ) { project ->
+
+                        DropdownMenuItem(
+
+                            text = {
+                                Text(project.projectName)
+                            },
+
+                            onClick = {
+
+                                onSelected(project)
+
+                                expanded = false
+                            }
+                        )
+
+                        HorizontalDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun OTDRStationDropdown(
     label: String,
     selectedStation: String?,
@@ -835,6 +959,7 @@ fun OTDRStationDropdown(
     isLoading: Boolean,
     loadingMessage: String,
     searchPlaceholder: String,
+    enabled: Boolean = true,
     onSelected: (String?) -> Unit
 ) {
 
@@ -910,7 +1035,7 @@ fun OTDRStationDropdown(
 
                 readOnly = true,
 
-                enabled = !isLoading,
+                enabled = enabled && !isLoading,
 
                 modifier = Modifier.fillMaxWidth(),
 
@@ -949,7 +1074,7 @@ fun OTDRStationDropdown(
             // CLICK OVERLAY
             // -----------------------------------------
 
-            if (!isLoading) {
+            if (enabled && !isLoading) {
 
                 Box(
                     modifier = Modifier

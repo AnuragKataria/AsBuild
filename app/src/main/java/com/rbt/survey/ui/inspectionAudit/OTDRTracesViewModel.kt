@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.JsonObject
 import com.rbt.survey.data.local.UserPreferences
+import com.rbt.survey.data.model.ProjectResponse
 import com.rbt.survey.data.repository.AssetRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,9 @@ class OTDRTracesViewModel(
     private val preferences: UserPreferences
 ) : ViewModel() {
 
+
+    private val _projects = MutableStateFlow<List<ProjectResponse>>(emptyList())
+    val projects: StateFlow<List<ProjectResponse>> = _projects.asStateFlow()
     private val _siteNames = MutableStateFlow<List<String>>(emptyList())
     val siteNames = _siteNames.asStateFlow()
 
@@ -37,7 +41,20 @@ class OTDRTracesViewModel(
     val isLoadingSites = _isLoadingSites.asStateFlow()
 
 
-    fun loadOTDRSiteNames() {
+    fun loadFilterProjects() {
+
+        viewModelScope.launch {
+
+            try {
+                _projects.value = repository.getProjects()
+
+            } catch (e: Exception) {
+                    e.message ?: "Failed to load projects"
+            }
+        }
+    }
+
+    fun loadOTDRSiteNames(projectId: Int) {
 
         viewModelScope.launch {
 
@@ -47,7 +64,7 @@ class OTDRTracesViewModel(
             try {
 
                 val result =
-                    repository.getOTDRSiteNames()
+                    repository.getOTDRSiteNames(projectId)
 
                 if (result.isSuccess) {
 
@@ -145,6 +162,7 @@ class OTDRTracesViewModel(
 
     fun uploadTrace(
         file: File,
+        projectId: Int,
         fromStation: String,
         toStation: String,
         deviceType: String
@@ -160,6 +178,7 @@ class OTDRTracesViewModel(
 
                 val result = repository.uploadOTDRTrace(
                     file = file,
+                    projectId = projectId,
                     fromStation = fromStation,
                     toStation = toStation,
                     uploadedBy = userName.orEmpty(),

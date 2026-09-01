@@ -217,9 +217,10 @@ interface AssetApi {
 
 
     @Multipart
-    @POST("otdr-reports/convert")
+    @POST("otdr-reports/upload")
     suspend fun uploadOTDRTrace(
         @Part file: MultipartBody.Part,
+        @Part("ProjectId") projectId: RequestBody,
         @Part("FromStationName") fromStationName: RequestBody,
         @Part("ToStationName") toStationName: RequestBody,
         @Part("ReportUploadedBy") reportUploadedBy: RequestBody,
@@ -229,8 +230,9 @@ interface AssetApi {
     @GET("otdr-reports/uploads")
     suspend fun getOTDRReports(): Response<JsonObject>
 
-    @GET("projects/5/asset-dynamic-fields/site-names")
+    @GET("projects/{projectID}/asset-dynamic-fields/site-names")
     suspend fun getOTDRSiteNames(
+        @Path("projectID") projectID: Int,
         @Query("assetTypeId") assetTypeId: Int = 86
     ): Response<JsonObject>
 
